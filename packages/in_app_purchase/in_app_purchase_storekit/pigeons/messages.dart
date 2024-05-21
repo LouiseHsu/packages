@@ -9,8 +9,10 @@ import 'package:pigeon/pigeon.dart';
   dartTestOut: 'test/test_api.g.dart',
   objcHeaderOut: 'darwin/Classes/messages.g.h',
   objcSourceOut: 'darwin/Classes/messages.g.m',
+  swiftOut: 'darwin/Classes/messages.g.swift',
   copyrightHeader: 'pigeons/copyright.txt',
 ))
+
 class SKPaymentTransactionMessage {
   SKPaymentTransactionMessage({
     required this.payment,
@@ -227,7 +229,7 @@ enum SKSubscriptionPeriodUnitMessage {
 abstract class InAppPurchaseAPI {
   /// Returns if the current device is able to make payments
   bool canMakePayments();
-
+  
   List<SKPaymentTransactionMessage> transactions();
 
   SKStorefrontMessage storefront();
