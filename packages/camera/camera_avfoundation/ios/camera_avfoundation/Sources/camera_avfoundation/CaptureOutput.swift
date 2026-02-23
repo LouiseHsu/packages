@@ -25,6 +25,8 @@ protocol CaptureVideoDataOutput: CaptureOutput {
   /// Corresponds to the `alwaysDiscardsLateVideoFrames` property of `AVCaptureVideoDataOutput`
   var alwaysDiscardsLateVideoFrames: Bool { get set }
 
+  var availableVideoPixelFormatTypes: [FourCharCode] { get }
+
   /// Corresponds to the `videoSettings` property of `AVCaptureVideoDataOutput`
   var videoSettings: [String: Any]! { get set }
 
