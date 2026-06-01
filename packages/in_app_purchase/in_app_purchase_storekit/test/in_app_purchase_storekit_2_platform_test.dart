@@ -805,5 +805,13 @@ void main() {
       expect(transactions.first.appAccountToken, isNotNull);
       expect(transactions.first.appAccountToken, 'fake_app_account_token');
     });
+
+    test('should expose quantity in unfinished transactions', () async {
+      final List<SK2Transaction> transactions =
+          await SK2Transaction.unfinishedTransactions();
+
+      expect(transactions, isNotEmpty);
+      expect(transactions.first.quantity, 5);
+    });
   });
 }

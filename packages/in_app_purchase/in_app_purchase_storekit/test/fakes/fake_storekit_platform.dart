@@ -504,6 +504,7 @@ class FakeStoreKit2Platform implements InAppPurchase2API {
         purchaseDate: '12-12',
         receiptData: 'fake_jws_representation',
         appAccountToken: 'fake_app_account_token',
+        purchasedQuantity: 5,
         status: SK2PurchaseStatusMessage.purchased,
       ),
     ]);

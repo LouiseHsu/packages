@@ -1,3 +1,7 @@
+## 0.4.11
+
+* Fixes `SK2Transaction.quantity` always returning the default value of `1` by correctly mapping the native transaction's purchased quantity.
+
 ## 0.4.10
 
 * Clarifies `completePurchase` usage and the consequences of unfinished transactions in the README and API docstrings.
