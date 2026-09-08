@@ -75,21 +75,21 @@ Future<TriageVerdict> evaluateWithGemini({
   String? gcpAccessToken,
   String gcpProjectId = 'flutter-dev',
   String gcpLocation = 'us-central1',
+  String model = 'gemini-2.5-flash-lite',
 }) async {
-  const modelName = 'gemini-2.5-flash';
   final Uri requestUri;
   final headers = <String, String>{'Content-Type': 'application/json'};
 
   if (gcpAccessToken != null && gcpAccessToken.isNotEmpty) {
     // Vertex AI endpoint (Keyless Workload Identity Federation)
     requestUri = Uri.parse(
-      'https://$gcpLocation-aiplatform.googleapis.com/v1/projects/$gcpProjectId/locations/$gcpLocation/publishers/google/models/$modelName:generateContent',
+      'https://$gcpLocation-aiplatform.googleapis.com/v1/projects/$gcpProjectId/locations/$gcpLocation/publishers/google/models/$model:generateContent',
     );
     headers['Authorization'] = 'Bearer $gcpAccessToken';
   } else if (apiKey != null && apiKey.isNotEmpty) {
     // Gemini Developer API endpoint (Local / API key testing)
     requestUri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey',
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
     );
   } else {
     throw StateError('No credentials found. Provide either GCP_ACCESS_TOKEN or GEMINI_API_KEY.');
@@ -269,6 +269,7 @@ Future<void> main(List<String> args) async {
       gcpAccessToken: env['GCP_ACCESS_TOKEN'],
       gcpProjectId: env['GCP_PROJECT_ID'] ?? 'flutter-dev',
       gcpLocation: env['GCP_LOCATION'] ?? 'us-central1',
+      model: env['GEMINI_MODEL'] ?? 'gemini-2.5-flash-lite',
     );
 
     stdout.writeln('Evaluation Results:');

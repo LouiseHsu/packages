@@ -39,6 +39,7 @@ jobs:
 
       - id: auth
         name: Authenticate to Google Cloud (WIF)
+        if: ${{ secrets.GCP_WIF_PROVIDER != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
@@ -48,6 +49,7 @@ jobs:
       - id: run_triage
         name: Run Pure Dart Triage
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'flutter-dev' }}
           GCP_LOCATION: ${{ vars.GCP_LOCATION || 'us-central1' }}
