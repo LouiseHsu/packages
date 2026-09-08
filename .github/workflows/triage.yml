@@ -1,0 +1,75 @@
+name: StoreKit Issue Triage
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to triage'
+        required: true
+        type: string
+
+permissions: read-all
+
+jobs:
+  triage:
+    name: Two-Tier StoreKit Triage
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+
+    # Run if triggered manually, or if issue mentions storekit, or has relevant labels
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.issue.labels.*.name, 'p: in_app_purchase') ||
+      contains(github.event.issue.labels.*.name, 'team-ios') ||
+      contains(github.event.issue.labels.*.name, 'storekit-triage') ||
+      contains(github.event.issue.title, 'storekit') ||
+      contains(github.event.issue.title, 'in_app_purchase_storekit')
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+
+      - id: auth
+        name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SA }}
+          token_format: access_token
+
+      - id: run_triage
+        name: Run Pure Dart Triage
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'flutter-dev' }}
+          GCP_LOCATION: ${{ vars.GCP_LOCATION || 'us-central1' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          dart packages/in_app_purchase/in_app_purchase_storekit/.agents/tool/triage.dart
+
+      - name: Apply Acceptance Label & Comment
+        if: steps.run_triage.outputs.accepted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          SCORE: ${{ steps.run_triage.outputs.score }}
+          CATEGORY: ${{ steps.run_triage.outputs.category }}
+          REASONING: ${{ steps.run_triage.outputs.reasoning }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --add-label "ai-accepted"
+          gh issue comment "$ISSUE_NUMBER" --body "### 🤖 StoreKit Autonomous Triage Verdict: ACCEPTED
+          * **Suitability Score**: \`${SCORE}/10\`
+          * **Category**: \`${CATEGORY}\`
+          * **Reasoning**: ${REASONING}
+
+          *This issue has been queued for autonomous SWE-bench verification and Draft PR generation.*"
