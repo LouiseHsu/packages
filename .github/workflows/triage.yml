@@ -72,6 +72,7 @@ jobs:
           CATEGORY: ${{ steps.run_triage.outputs.category }}
           REASONING: ${{ steps.run_triage.outputs.reasoning }}
         run: |
+          gh label create "ai-accepted" --description "Accepted by AI triage for autonomous resolution" --color "0E8A16" --force || true
           gh issue edit "$ISSUE_NUMBER" --add-label "ai-accepted"
           gh issue comment "$ISSUE_NUMBER" --body "### 🤖 StoreKit Autonomous Triage Verdict: ACCEPTED
           * **Suitability Score**: \`${SCORE}/10\`
