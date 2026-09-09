@@ -28,6 +28,7 @@ jobs:
       contains(github.event.issue.labels.*.name, 'team-ios') ||
       contains(github.event.issue.labels.*.name, 'storekit-triage') ||
       contains(github.event.issue.title, 'storekit') ||
+      contains(github.event.issue.title, 'StoreKit') ||
       contains(github.event.issue.title, 'in_app_purchase_storekit')
 
     steps:
@@ -39,7 +40,9 @@ jobs:
 
       - id: auth
         name: Authenticate to Google Cloud (WIF)
-        if: ${{ secrets.GCP_WIF_PROVIDER != '' }}
+        env:
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+        if: env.GCP_WIF_PROVIDER != ''
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
@@ -51,8 +54,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'flutter-dev' }}
-          GCP_LOCATION: ${{ vars.GCP_LOCATION || 'us-central1' }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_LOCATION: ${{ vars.GCP_LOCATION }}
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
