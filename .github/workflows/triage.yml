@@ -52,6 +52,7 @@ jobs:
       - id: run_triage
         name: Run Pure Dart Triage
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}

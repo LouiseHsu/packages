@@ -241,6 +241,25 @@ Future<void> main(List<String> args) async {
     }
   }
 
+  if (title.isEmpty && issueNumber > 0) {
+    try {
+      final ProcessResult result = Process.runSync('gh', <String>[
+        'issue',
+        'view',
+        issueNumber.toString(),
+        '--json',
+        'title,body',
+      ]);
+      if (result.exitCode == 0) {
+        final issueData = jsonDecode(result.stdout as String) as Map<String, dynamic>;
+        title = issueData['title'] as String? ?? title;
+        body = issueData['body'] as String? ?? body;
+      }
+    } catch (e) {
+      stderr.writeln('Warning: Could not fetch issue via gh CLI: $e');
+    }
+  }
+
   if (title.isEmpty) {
     stderr.writeln('Error: Issue title is empty. Set ISSUE_TITLE or GITHUB_EVENT_PATH.');
     exitCode = 1;
