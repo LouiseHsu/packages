@@ -750,4 +750,11 @@ void main() {
       expect(transactions.first.quantity, 2);
     });
   });
+
+  test('should expose originalPurchaseDate in unfinished transactions', () async {
+    final List<SK2Transaction> transactions = await SK2Transaction.unfinishedTransactions();
+
+    expect(transactions, isNotEmpty);
+    expect(transactions.first.originalPurchaseDate, isNotNull);
+  });
 }

@@ -657,6 +657,7 @@ class SK2TransactionMessage {
     required this.originalId,
     required this.productId,
     this.purchaseDate,
+    this.originalPurchaseDate,
     this.expirationDate,
     this.purchasedQuantity = 1,
     this.appAccountToken,
@@ -673,6 +674,8 @@ class SK2TransactionMessage {
   String productId;
 
   double? purchaseDate;
+
+  double? originalPurchaseDate;
 
   double? expirationDate;
 
@@ -696,6 +699,7 @@ class SK2TransactionMessage {
       originalId,
       productId,
       purchaseDate,
+      originalPurchaseDate,
       expirationDate,
       purchasedQuantity,
       appAccountToken,
@@ -717,13 +721,14 @@ class SK2TransactionMessage {
       originalId: result[1]! as int,
       productId: result[2]! as String,
       purchaseDate: result[3] as double?,
-      expirationDate: result[4] as double?,
-      purchasedQuantity: result[5]! as int,
-      appAccountToken: result[6] as String?,
-      receiptData: result[7] as String?,
-      error: result[8] as SK2ErrorMessage?,
-      jsonRepresentation: result[9] as String?,
-      status: result[10]! as SK2PurchaseStatusMessage,
+      originalPurchaseDate: result[4] as double?,
+      expirationDate: result[5] as double?,
+      purchasedQuantity: result[6]! as int,
+      appAccountToken: result[7] as String?,
+      receiptData: result[8] as String?,
+      error: result[9] as SK2ErrorMessage?,
+      jsonRepresentation: result[10] as String?,
+      status: result[11]! as SK2PurchaseStatusMessage,
     );
   }
 
@@ -740,6 +745,7 @@ class SK2TransactionMessage {
         _deepEquals(originalId, other.originalId) &&
         _deepEquals(productId, other.productId) &&
         _deepEquals(purchaseDate, other.purchaseDate) &&
+        _deepEquals(originalPurchaseDate, other.originalPurchaseDate) &&
         _deepEquals(expirationDate, other.expirationDate) &&
         _deepEquals(purchasedQuantity, other.purchasedQuantity) &&
         _deepEquals(appAccountToken, other.appAccountToken) &&
@@ -755,7 +761,7 @@ class SK2TransactionMessage {
 
   @override
   String toString() {
-    return 'SK2TransactionMessage(id: $id, originalId: $originalId, productId: $productId, purchaseDate: $purchaseDate, expirationDate: $expirationDate, purchasedQuantity: $purchasedQuantity, appAccountToken: $appAccountToken, receiptData: $receiptData, error: $error, jsonRepresentation: $jsonRepresentation, status: $status)';
+    return 'SK2TransactionMessage(id: $id, originalId: $originalId, productId: $productId, purchaseDate: $purchaseDate, originalPurchaseDate: $originalPurchaseDate, expirationDate: $expirationDate, purchasedQuantity: $purchasedQuantity, appAccountToken: $appAccountToken, receiptData: $receiptData, error: $error, jsonRepresentation: $jsonRepresentation, status: $status)';
   }
 }
 

@@ -10,8 +10,10 @@ import '../codegen.dart';
 import '../gemini_agent.dart';
 import '../guardrails.dart';
 import '../harness.dart';
+import '../native_analyzer.dart';
 import '../publisher.dart';
 import '../test_runner.dart';
+import '../workspace.dart';
 
 void main() {
   group('HarnessContext State Machine Transitions', () {
@@ -113,7 +115,12 @@ void main() {
         ),
       );
 
-      final harness = PackageHarness(context, testRunner: mockRunner);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+      );
       await harness.handleRedTest();
 
       expect(context.currentPhase, HarnessPhase.implementation);
@@ -138,7 +145,12 @@ void main() {
           const TestRunResult(exitCode: 0, stdout: '00:01 +10: All tests passed!', stderr: ''),
         );
 
-        final harness = PackageHarness(context, testRunner: mockRunner);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          testRunner: mockRunner,
+        );
         await harness.handleRedTest();
 
         expect(context.currentPhase, HarnessPhase.failed);
@@ -159,7 +171,12 @@ void main() {
 
       final mockRunner = MockTestRunner(const TestRunResult(exitCode: 1, stdout: '', stderr: ''));
 
-      final harness = PackageHarness(context, testRunner: mockRunner);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+      );
       await harness.handleRedTest();
 
       expect(context.currentPhase, HarnessPhase.failed);
@@ -188,7 +205,12 @@ void main() {
           ),
         );
 
-        final harness = PackageHarness(context, testRunner: mockRunner);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          testRunner: mockRunner,
+        );
         await harness.handleRedTest();
 
         expect(context.currentPhase, HarnessPhase.failed);
@@ -208,7 +230,11 @@ void main() {
         issueBody: 'Expose mock property in package',
       );
 
-      final harness = PackageHarness(context);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+      );
       final HarnessPhase finalPhase = await harness.run();
 
       expect(finalPhase, HarnessPhase.complete);
@@ -325,7 +351,12 @@ void main() {
           ),
         );
 
-        final harness = PackageHarness(context, validator: mockValidator);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          validator: mockValidator,
+        );
         await harness.handleValidation();
 
         expect(context.currentPhase, HarnessPhase.complete);
@@ -356,7 +387,12 @@ void main() {
         ),
       );
 
-      final harness = PackageHarness(context, validator: mockValidator);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        validator: mockValidator,
+      );
       await harness.handleValidation();
 
       expect(context.currentPhase, HarnessPhase.failed);
@@ -386,7 +422,13 @@ void main() {
       );
       final mockRunner = MockTestRunner(const TestRunResult(exitCode: 0, stdout: '', stderr: ''));
 
-      final harness = PackageHarness(context, testRunner: mockRunner, codeGenerator: mockGen);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+      );
       await harness.handleImplementation();
 
       expect(context.currentPhase, HarnessPhase.failed);
@@ -418,7 +460,13 @@ void main() {
           ),
         );
 
-        final harness = PackageHarness(context, testRunner: mockRunner, codeGenerator: mockGen);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          testRunner: mockRunner,
+          codeGenerator: mockGen,
+        );
         await harness.handleImplementation();
 
         expect(context.currentPhase, HarnessPhase.failed);
@@ -450,7 +498,13 @@ void main() {
         ),
       );
 
-      final harness = PackageHarness(context, testRunner: mockRunner, codeGenerator: mockGen);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+      );
       await harness.handleImplementation();
 
       expect(context.currentPhase, HarnessPhase.failed);
@@ -478,7 +532,13 @@ void main() {
           const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''),
         );
 
-        final harness = PackageHarness(context, testRunner: mockRunner, codeGenerator: mockGen);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          testRunner: mockRunner,
+          codeGenerator: mockGen,
+        );
         await harness.handleImplementation();
 
         expect(context.currentPhase, HarnessPhase.validation);
@@ -503,7 +563,13 @@ void main() {
         const TestRunResult(exitCode: 1, stdout: 'Test failed as expected', stderr: ''),
       );
 
-      final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        agent: mockAgent,
+      );
       await harness.handleRedTest();
 
       expect(mockAgent.generatedRedTest, isTrue);
@@ -526,7 +592,13 @@ void main() {
         const TestRunResult(exitCode: 1, stdout: 'Test failed as expected', stderr: ''),
       );
 
-      final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        agent: mockAgent,
+      );
       await harness.handleRedTest();
 
       expect(mockAgent.generatedRedTest, isFalse);
@@ -545,7 +617,13 @@ void main() {
       final mockAgent = MockHarnessAgent(shouldThrow: true);
       final mockRunner = MockTestRunner(const TestRunResult(exitCode: 1, stdout: '', stderr: ''));
 
-      final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        agent: mockAgent,
+      );
       await harness.handleRedTest();
 
       expect(context.currentPhase, HarnessPhase.failed);
@@ -570,6 +648,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -600,6 +680,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -626,6 +708,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -825,7 +909,13 @@ void main() {
         const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''),
       );
 
-      final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        agent: mockAgent,
+      );
       await harness.handleRedTest();
 
       // The agent produces the same test every time, so attempts 3 through 5
@@ -858,7 +948,13 @@ void main() {
         ),
       );
 
-      final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        agent: mockAgent,
+      );
       await harness.handleRedTest();
 
       expect(context.currentPhase, HarnessPhase.implementation);
@@ -886,6 +982,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -923,6 +1021,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -963,6 +1063,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -974,6 +1076,88 @@ void main() {
       expect(context.currentPhase, HarnessPhase.failed);
       expect(context.failureReason, contains('generated file'));
       expect(mockGen.generateCallCount, 0);
+    });
+
+    test('handleImplementation rejects a fix whose native sources fail to type-check', () async {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+      context.transitionTo(HarnessPhase.redTest);
+      context.transitionTo(HarnessPhase.implementation);
+
+      final mockAgent = MockHarnessAgent();
+      final mockGen = MockCodeGenerator(
+        const CodeGenResult(exitCode: 0, stdout: 'Generated', stderr: ''),
+      );
+      final mockRunner = MockTestRunner(
+        const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''),
+      );
+      final mockNative = MockNativeAnalyzer(
+        resultToReturn: const NativeAnalysisResult(
+          exitCode: 1,
+          stdout: '',
+          stderr: "Translators.swift:14:20: error: cannot find 'originalBuyDate' in scope",
+        ),
+      );
+
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: mockNative,
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+        agent: mockAgent,
+      );
+      await harness.handleImplementation();
+
+      expect(context.currentPhase, HarnessPhase.failed);
+      expect(context.failureReason, contains('Native analysis failed'));
+      expect(context.failureReason, contains('originalBuyDate'));
+      // The Dart suite mocks the platform channel, so it would have passed
+      // despite the broken Swift. The gate must run before it, and short
+      // circuit it.
+      expect(mockRunner.lastRanTestFilePath, isNull);
+    });
+
+    test('handleImplementation records why native analysis was skipped', () async {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+      context.transitionTo(HarnessPhase.redTest);
+      context.transitionTo(HarnessPhase.implementation);
+
+      final mockAgent = MockHarnessAgent();
+      final mockGen = MockCodeGenerator(
+        const CodeGenResult(exitCode: 0, stdout: 'Generated', stderr: ''),
+      );
+      final mockRunner = MockTestRunner(
+        const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''),
+      );
+      final mockNative = MockNativeAnalyzer(
+        resultToReturn: const NativeAnalysisResult.skipped('Swift type-checking requires macOS.'),
+      );
+
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: mockNative,
+        workspace: FakeWorkspace(),
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+        agent: mockAgent,
+      );
+      await harness.handleImplementation();
+
+      // A runner without Xcode must still be able to finish a run; the gap is
+      // recorded rather than treated as either success or failure.
+      expect(context.currentPhase, HarnessPhase.validation);
+      expect(context.state.nativeAnalysisSkippedReason, contains('requires macOS'));
+      expect(context.logs, contains(contains('Native analysis skipped')));
     });
 
     test('handleImplementation recovers on attempt 2 when attempt 1 fails codegen', () async {
@@ -997,6 +1181,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1038,6 +1224,8 @@ void main() {
 
         final harness = PackageHarness(
           context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
           validator: mockValidator,
@@ -1073,6 +1261,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1153,7 +1343,13 @@ void main() {
           ),
         );
 
-        final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          testRunner: mockRunner,
+          agent: mockAgent,
+        );
         await harness.handleRedTest();
 
         expect(context.redTestCode, isNotNull);
@@ -1227,6 +1423,33 @@ void main() {
       expect(metadata.body, isNot(contains('Verified failure before the fix')));
     });
 
+    test('DraftPrMetadata warns when native sources were not type-checked', () {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+      context.state.nativeAnalysisSkippedReason = 'Swift type-checking requires macOS.';
+
+      final metadata = DraftPrMetadata.fromContext(context);
+
+      // An absent check looks exactly like a passing one unless it is stated.
+      expect(metadata.body, contains('not** type-checked'));
+      expect(metadata.body, contains('requires macOS'));
+    });
+
+    test('DraftPrMetadata omits the native warning when the check ran', () {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+
+      final metadata = DraftPrMetadata.fromContext(context);
+
+      expect(metadata.body, isNot(contains('type-checked')));
+    });
+
     test(
       'PackageHarness does not publish PR when publishPr is false (default safety guardrail)',
       () async {
@@ -1237,7 +1460,12 @@ void main() {
         );
 
         final mockPublisher = MockPrPublisher();
-        final harness = PackageHarness(context, publisher: mockPublisher);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          publisher: mockPublisher,
+        );
         final HarnessPhase finalPhase = await harness.run();
 
         expect(finalPhase, HarnessPhase.complete);
@@ -1257,7 +1485,12 @@ void main() {
         );
 
         final mockPublisher = MockPrPublisher();
-        final harness = PackageHarness(context, publisher: mockPublisher);
+        final harness = PackageHarness(
+          context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
+          publisher: mockPublisher,
+        );
         final HarnessPhase finalPhase = await harness.run();
 
         expect(finalPhase, HarnessPhase.complete);
@@ -1300,6 +1533,8 @@ void main() {
 
         final harness = PackageHarness(
           context,
+          nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
           validator: mockValidator,
@@ -1361,6 +1596,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         validator: mockValidator,
@@ -1410,6 +1647,8 @@ void main() {
 
       final harness = PackageHarness(
         context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         validator: mockValidator,
@@ -1434,7 +1673,11 @@ void main() {
       final context = HarnessContext(issueNumber: 42, isDryRun: true, issueTitle: 'Successful Run');
       context.customLogParentDirectory = tempDir.path;
 
-      final harness = PackageHarness(context);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+      );
       final HarnessPhase finalPhase = await harness.run();
 
       expect(finalPhase, HarnessPhase.complete);
@@ -1459,7 +1702,11 @@ void main() {
       context.customLogParentDirectory = tempDir.path;
       context.recordArtifact('custom_error_trace.txt', 'Pigeon compiler error details');
 
-      final harness = PackageHarness(context);
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+      );
       final HarnessPhase finalPhase = await harness.run();
 
       expect(finalPhase, HarnessPhase.failed);
@@ -1562,6 +1809,51 @@ class MockGuardrailValidator implements GuardrailValidator {
         failureReason: 'Static analysis check failed: missing constructor initializer',
       );
     }
+    return resultToReturn;
+  }
+}
+
+/// A [Workspace] that records calls instead of touching git or the disk.
+///
+/// The real implementation runs `git checkout -- .`, which discards
+/// uncommitted work. Pointed at the package under test -- which is this very
+/// checkout -- it would delete the developer's changes as a side effect of
+/// running the suite. [GitWorkspace] is covered by hermetic tests over
+/// throwaway repositories in `workspace_test.dart` instead.
+class FakeWorkspace implements Workspace {
+  FakeWorkspace({this.untracked = const <String>{}});
+
+  final Set<String> untracked;
+
+  int revertCallCount = 0;
+
+  @override
+  Future<Set<String>> untrackedFiles(String targetDir) async => untracked;
+
+  @override
+  Future<RevertResult> revert(String targetDir, Set<String> baselineUntracked) async {
+    revertCallCount++;
+    return const RevertResult();
+  }
+}
+
+/// A [NativeAnalyzer] that reports a canned result without running a compiler.
+///
+/// Injected everywhere a [PackageHarness] is built so the suite never shells
+/// out to `swiftc`, which would make these tests depend on the developer's
+/// Xcode install and on the working tree being free of Swift errors.
+class MockNativeAnalyzer implements NativeAnalyzer {
+  MockNativeAnalyzer({
+    this.resultToReturn = const NativeAnalysisResult(exitCode: 0, stdout: '', stderr: ''),
+  });
+
+  final NativeAnalysisResult resultToReturn;
+
+  int analyzeCallCount = 0;
+
+  @override
+  Future<NativeAnalysisResult> analyze({required String packagePath}) async {
+    analyzeCallCount++;
     return resultToReturn;
   }
 }
