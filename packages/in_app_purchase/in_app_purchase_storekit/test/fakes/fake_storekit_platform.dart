@@ -366,6 +366,7 @@ class FakeStoreKit2Platform implements InAppPurchase2API {
         originalId: 123,
         productId: 'product_id',
         purchaseDate: 123123.121,
+        originalPurchaseDate: 123123.121,
         expirationDate: 321321.32,
         receiptData: 'fake_jws_representation',
         appAccountToken: 'fake_app_account_token',
