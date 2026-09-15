@@ -111,6 +111,19 @@ class DraftPrMetadata {
       buffer.writeln('</details>');
       buffer.writeln();
     }
+
+    // Absence of a native check is indistinguishable from a passing one unless
+    // it is stated. Said plainly so a reviewer knows to build the Swift half
+    // themselves.
+    final String? nativeSkipped = context.state.nativeAnalysisSkippedReason;
+    if (nativeSkipped != null && nativeSkipped.trim().isNotEmpty) {
+      buffer.writeln(
+        '> [!WARNING]\n'
+        '> Native sources were **not** type-checked on this run '
+        '($nativeSkipped) so any Swift in this diff is unverified.',
+      );
+      buffer.writeln();
+    }
     buffer.writeln('---');
     buffer.writeln('*Autonomous Draft PR created by `.agents/tool/harness.dart`*');
 

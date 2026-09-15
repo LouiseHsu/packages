@@ -9,6 +9,7 @@ import 'codegen.dart';
 import 'gemini_agent.dart';
 import 'guardrails.dart';
 import 'harness_context.dart';
+import 'native_analyzer.dart';
 import 'publisher.dart';
 import 'test_runner.dart';
 
@@ -16,12 +17,13 @@ export 'harness_context.dart';
 
 /// The deterministic controller that steps through each harness phase.
 class PackageHarness {
-  /// Creates a [PackageHarness] with an optional [testRunner], [validator], [codeGenerator], and [agent].
+  /// Creates a [PackageHarness] with an optional [testRunner], [validator], [codeGenerator], [nativeAnalyzer], and [agent].
   PackageHarness(
     this.context, {
     this.testRunner = const FlutterTestRunner(),
     this.validator = const DefaultGuardrailValidator(),
     this.codeGenerator = const DefaultCodeGenerator(),
+    this.nativeAnalyzer = const SwiftTypecheckAnalyzer(),
     HarnessAgent? agent,
     PrPublisher? publisher,
   }) : agent =
@@ -44,6 +46,9 @@ class PackageHarness {
 
   /// Code generator instance.
   final CodeGenerator codeGenerator;
+
+  /// Native (non-Dart) source analyzer instance.
+  final NativeAnalyzer nativeAnalyzer;
 
   /// AI agent instance.
   final HarnessAgent agent;
@@ -430,8 +435,9 @@ class PackageHarness {
   /// Phase 2 (PASS_TO_PASS): Implementation verification.
   ///
   /// 1. Runs code generation (Pigeon) if applicable.
-  /// 2. Re-runs the target test to assert that it is now GREEN (passing).
-  /// 3. Runs the package test suite to verify zero regressions.
+  /// 2. Type-checks native sources, which the Dart tests cannot cover.
+  /// 3. Re-runs the target test to assert that it is now GREEN (passing).
+  /// 4. Runs the package test suite to verify zero regressions.
   Future<void> handleImplementation() async {
     context.log('Phase 2 (PASS_TO_PASS): Implementation Verification...');
     if (context.isDryRun) {
@@ -552,7 +558,38 @@ class PackageHarness {
         continue;
       }
 
-      // 2. Re-run target test: assert GREEN
+      // 2. Type-check native sources.
+      //
+      // Runs after codegen, which rewrites the generated Swift bindings, and
+      // before the Dart tests, which are slower and which mock the platform
+      // channel -- so they can pass while the Swift is nonsense.
+      final NativeAnalysisResult nativeResult = await nativeAnalyzer.analyze(
+        packagePath: targetDir,
+      );
+
+      if (nativeResult.skipped) {
+        context.log('Native analysis skipped: ${nativeResult.skippedReason}');
+        context.state.nativeAnalysisSkippedReason = nativeResult.skippedReason;
+      } else if (!nativeResult.success) {
+        lastFailureReason =
+            'Native analysis failed (exit code ${nativeResult.exitCode}):\n'
+            '${nativeResult.failureSummary}';
+        context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
+        context.state.recordAttemptFailure(lastFailureReason);
+        context.recordArtifact(
+          'implementation_attempt_${attempt}_native_analysis_failure.txt',
+          nativeResult.failureSummary,
+        );
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
+        continue;
+      } else {
+        context.log('✅ Native sources type-checked cleanly.');
+        context.state.nativeAnalysisSkippedReason = null;
+      }
+
+      // 3. Re-run target test: assert GREEN
       context.log('Running PASS_TO_PASS target test: $relativeTestFile in $targetDir');
       final TestRunResult targetResult = await testRunner.runTest(
         testFilePath: relativeTestFile,
@@ -577,7 +614,7 @@ class PackageHarness {
 
       context.log('✅ Target test passed cleanly (GREEN)!');
 
-      // 3. Run full package test suite to verify zero regressions
+      // 4. Run full package test suite to verify zero regressions
       context.log('Running full test suite in $targetDir to verify zero regressions...');
       final TestRunResult suiteResult = await testRunner.runSuite(workingDirectory: targetDir);
 
@@ -597,7 +634,7 @@ class PackageHarness {
         continue;
       }
 
-      // 4. Run static analysis and guardrail verification
+      // 5. Run static analysis and guardrail verification
       context.log('Running static analysis and guardrails check for ${context.packageName}...');
       final ValidationResult validationResult = await validator.validate(
         packagePath: targetDir,

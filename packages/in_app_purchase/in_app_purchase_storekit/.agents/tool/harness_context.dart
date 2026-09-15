@@ -154,6 +154,13 @@ class RunState {
   /// real, so it survives to be reported in the Draft PR.
   String? verifiedRedFailureSummary;
 
+  /// Why native type-checking did not run, or null if it ran.
+  ///
+  /// Surfaced in the Draft PR. A run on a machine without the Xcode toolchain
+  /// still produces a fix, but its native half is unverified, and a reviewer
+  /// has no way to tell that apart from a clean check unless it is stated.
+  String? nativeAnalysisSkippedReason;
+
   /// Failure summaries from previous attempts within the current phase.
   final List<String> attemptFailures = <String>[];
 
