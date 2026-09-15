@@ -1,0 +1,133 @@
+name: Autonomous Agent Resolution
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'GitHub issue number to resolve'
+        required: true
+        type: string
+      dry_run:
+        description: 'Run the pipeline without publishing a Draft PR'
+        required: false
+        default: false
+        type: boolean
+
+# Serialize agent runs per issue so two runs cannot race on the same branch.
+concurrency:
+  group: agent-resolve-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+permissions: read-all
+
+jobs:
+  resolve:
+    name: Resolve Issue with SWE-bench Harness
+    runs-on: ubuntu-latest
+
+    # `issues: [labeled]` fires for every label, so gate on the specific one.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'ai-accepted'
+
+    # The harness runs a full test suite per implementation attempt. Cap it well
+    # below the 6h GitHub default so a stuck retry loop cannot burn the budget.
+    timeout-minutes: 45
+
+    permissions:
+      id-token: write      # Google Cloud WIF authentication
+      contents: write      # Create branch, commit, and push
+      pull-requests: write # Open the Draft PR via gh CLI
+      issues: write        # Comment resolution status back on the issue
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Fail before spending runner minutes on checkout/SDK/pub-get if the agent
+      # has no way to reach a model.
+      - name: Verify model credentials are configured
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+        run: |
+          if [[ -z "$GEMINI_API_KEY" && -z "$GCP_WIF_PROVIDER" ]]; then
+            echo "::error::No model credentials configured. Set the GEMINI_API_KEY secret, or configure GCP_WIF_PROVIDER + GCP_WIF_SA for Workload Identity Federation."
+            exit 1
+          fi
+
+      - name: Set up Flutter
+        uses: ./.github/workflows/internals/install_flutter
+
+      - name: Configure Git Bot Identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - id: auth
+        name: Authenticate to Google Cloud (WIF)
+        env:
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+        if: env.GCP_WIF_PROVIDER != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SA }}
+          token_format: access_token
+
+      - name: Install Package Dependencies
+        run: |
+          cd packages/in_app_purchase/in_app_purchase_storekit
+          flutter pub get
+
+      # Triage already ran in triage.yml (that is what applied `ai-accepted`).
+      # --skip-triage avoids a second, non-deterministic Gemini verdict that could
+      # silently abort an already-approved issue.
+      - name: Run Autonomous Resolution Pipeline
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_LOCATION: ${{ vars.GCP_LOCATION }}
+          AGENT_PR_BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          REPO: ${{ github.repository }}
+          PUBLISH_FLAG: ${{ inputs.dry_run && '--dry-run' || '--publish-pr' }}
+        run: |
+          dart packages/in_app_purchase/in_app_purchase_storekit/.agents/tool/run.dart \
+            --issue="$ISSUE_NUMBER" \
+            --package=in_app_purchase_storekit \
+            --repo="$REPO" \
+            --skip-triage \
+            "$PUBLISH_FLAG"
+
+      # The harness writes prompts, raw model responses, and failure traces to
+      # .agents/logs/, which is gitignored and dies with the runner. Capture it
+      # on failure, when it is the only way to diagnose what the agent did.
+      - name: Upload agent run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-logs-issue-${{ github.event.issue.number || inputs.issue_number }}
+          path: packages/in_app_purchase/in_app_purchase_storekit/.agents/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Report failure on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "### 🤖 Autonomous Resolution Failed
+
+          The agent could not produce a verified Draft PR for this issue.
+
+          [View run logs and artifacts]($RUN_URL)"
