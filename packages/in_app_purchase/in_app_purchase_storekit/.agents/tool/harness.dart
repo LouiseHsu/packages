@@ -104,11 +104,7 @@ class PackageHarness {
     } else {
       context.log('🛑 Harness failed: ${context.failureReason}');
       if (context.initialTestFileContent != null && context.testFilePath != null) {
-        final testFile = File(
-          File(context.testFilePath!).isAbsolute
-              ? context.testFilePath!
-              : '${context.resolvePackagePath()}/${context.testFilePath!}',
-        );
+        final testFile = File(resolvePath(context.resolvePackagePath(), context.testFilePath!));
         if (testFile.existsSync()) {
           testFile.writeAsStringSync(context.initialTestFileContent!);
         }
@@ -189,6 +185,117 @@ class PackageHarness {
     context.transitionTo(HarnessPhase.redTest, reason: 'Init complete');
   }
 
+  /// Resolves [filePath] against [targetDir] unless it is already absolute.
+  static String resolvePath(String targetDir, String filePath) =>
+      File(filePath).isAbsolute ? filePath : '$targetDir/$filePath';
+
+  /// The test file used when the caller does not name one.
+  String get _defaultTestFilePath => context.packageName == 'in_app_purchase_storekit'
+      ? 'test/in_app_purchase_storekit_2_platform_test.dart'
+      : 'test/${context.packageName}_test.dart';
+
+  /// Returns the set of untracked files under [targetDir], relative to it.
+  ///
+  /// Recorded before the agent runs so that files it creates can be told apart
+  /// from untracked files that were already there, which must not be deleted.
+  Future<Set<String>> _untrackedFiles(String targetDir) async {
+    try {
+      final ProcessResult result = await Process.run('git', <String>[
+        'ls-files',
+        '--others',
+        '--exclude-standard',
+      ], workingDirectory: targetDir);
+      if (result.exitCode != 0) {
+        return <String>{};
+      }
+      return (result.stdout as String)
+          .split('\n')
+          .map((String line) => line.trim())
+          .where((String line) => line.isNotEmpty && !line.contains('.agents/'))
+          .toSet();
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  /// Restores [targetDir] to its committed state, discarding whatever the agent
+  /// changed during an attempt.
+  ///
+  /// Asks git what is dirty rather than reverting a fixed list of files. A
+  /// hardcoded list silently fails to revert any file the agent was not
+  /// expected to touch, which lets one attempt's edits leak into the next and
+  /// lets stray edits survive a failed run.
+  ///
+  /// `.agents` is excluded because the harness's own source lives there, inside
+  /// the package it operates on.
+  Future<void> _revertWorkspace(String targetDir, Set<String> baselineUntracked) async {
+    final ProcessResult checkout = await Process.run('git', <String>[
+      'checkout',
+      '--',
+      '.',
+      ':(exclude).agents',
+    ], workingDirectory: targetDir);
+    if (checkout.exitCode != 0) {
+      context.log(
+        '⚠️ Could not revert tracked files: ${(checkout.stderr as String? ?? '').trim()}',
+      );
+    }
+
+    // Remove only files this run created. Untracked files that predate the run
+    // belong to the developer and are left alone.
+    final Set<String> nowUntracked = await _untrackedFiles(targetDir);
+    for (final String relPath in nowUntracked.difference(baselineUntracked)) {
+      final file = File('$targetDir/$relPath');
+      if (file.existsSync()) {
+        try {
+          file.deleteSync();
+          context.log('Removed file created during the attempt: $relPath');
+        } catch (e) {
+          context.log('⚠️ Could not remove $relPath: $e');
+        }
+      }
+    }
+  }
+
+  /// Rewrites the target test file with the verified red test.
+  ///
+  /// Returns true if the file had drifted and was restored. Nothing stops
+  /// [HarnessAgent.generateFix] from patching the test file, and a fix that
+  /// weakens the test would otherwise pass every downstream gate. Rewriting it
+  /// before the test runs makes the judge immune to the thing being judged.
+  bool _restoreRedTest(String targetDir, String relativeTestFile, String verifiedRedTest) {
+    final testFile = File(resolvePath(targetDir, relativeTestFile));
+    if (!testFile.existsSync()) {
+      testFile.writeAsStringSync(verifiedRedTest);
+      return true;
+    }
+    if (testFile.readAsStringSync() == verifiedRedTest) {
+      return false;
+    }
+    testFile.writeAsStringSync(verifiedRedTest);
+    return true;
+  }
+
+  /// Whether to stop retrying after the attempt numbered [attempt].
+  ///
+  /// Stops when the last two attempts failed the same way. Each further attempt
+  /// costs a model call plus a full test suite run, and an unchanged failure is
+  /// strong evidence the model is resampling the same misconception rather than
+  /// exploring something new.
+  bool _shouldStopRetrying(int attempt, int maxAttempts) {
+    if (attempt >= maxAttempts) {
+      return true;
+    }
+    if (!context.state.isRepeatingFailure) {
+      return false;
+    }
+    context.log(
+      '⚠️ Attempt $attempt failed the same way as the previous attempt. '
+      'Stopping early instead of using the remaining ${maxAttempts - attempt} attempt(s).',
+    );
+    return true;
+  }
+
   /// Phase 1 (FAIL_TO_PASS): Red test verification.
   ///
   /// Executes the target test and asserts that it fails on clean code.
@@ -202,18 +309,12 @@ class PackageHarness {
     }
 
     if (context.testFilePath == null || context.testFilePath!.isEmpty) {
-      if (context.packageName == 'in_app_purchase_storekit') {
-        context.testFilePath = 'test/in_app_purchase_storekit_2_platform_test.dart';
-      } else {
-        context.testFilePath = 'test/${context.packageName}_test.dart';
-      }
+      context.testFilePath = _defaultTestFilePath;
     }
 
     final String targetDir = context.resolvePackagePath();
     final String relativeTestFile = context.testFilePath!;
-    final resolvedPath = File(relativeTestFile).isAbsolute
-        ? relativeTestFile
-        : '$targetDir/$relativeTestFile';
+    final String resolvedPath = resolvePath(targetDir, relativeTestFile);
 
     final testFile = File(resolvedPath);
     if (!testFile.existsSync()) {
@@ -227,6 +328,7 @@ class PackageHarness {
     context.initialTestFileContent ??= initialContent;
     final int maxAttempts = context.skipAgent ? 1 : context.maxRetries;
     String? lastFailureReason;
+    context.state.resetAttemptHistory();
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!context.skipAgent) {
@@ -242,7 +344,10 @@ class PackageHarness {
         } catch (e) {
           lastFailureReason = 'Agent failed to generate red test: $e';
           context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-          context.lastTestFailureSummary = lastFailureReason;
+          context.state.recordAttemptFailure(lastFailureReason);
+          if (_shouldStopRetrying(attempt, maxAttempts)) {
+            break;
+          }
           continue;
         }
       }
@@ -258,11 +363,20 @@ class PackageHarness {
             'FAIL_TO_PASS Invariant Violated: Test passed on clean main. '
             'A reproduction test must fail before production changes are applied.';
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-        context.lastTestFailureSummary = lastFailureReason;
+        // Record the generated test alongside the reason. The reason alone is a
+        // fixed string, so without this every attempt would look identical and
+        // the repeat detector would stop after two genuinely different tests.
+        context.state.recordAttemptFailure(
+          '$lastFailureReason\n'
+          'The test you generated was:\n${context.redTestCode ?? '(unavailable)'}',
+        );
         context.recordArtifact(
           'red_test_attempt_${attempt}_passed_unexpectedly.txt',
           'Test passed on clean main (exit code 0):\n${result.stdout}\n${result.stderr}'.trim(),
         );
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
         continue;
       }
 
@@ -276,8 +390,11 @@ class PackageHarness {
             'StoreKit 2 classes are strictly Pigeon-typed and do NOT have fromMap or toMap. '
             'Test via platform methods (e.g. SK2Transaction.unfinishedTransactions()) or the standard constructor.';
         context.log('⚠️ Attempt $attempt rejected: $lastFailureReason');
-        context.lastTestFailureSummary = lastFailureReason;
+        context.state.recordAttemptFailure('$lastFailureReason\n$summary');
         context.recordArtifact('red_test_attempt_${attempt}_hallucinated_fromMap.txt', summary);
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
         continue;
       }
 
@@ -289,6 +406,9 @@ class PackageHarness {
         context.recordArtifact('red_test_attempt_${attempt}_code.dart', context.redTestCode!);
       }
       context.lastTestFailureSummary = result.failureSummary;
+      // Preserved for the Draft PR: this is the evidence the bug was real, and
+      // the only way a reviewer can check the test failed for the right reason.
+      context.state.verifiedRedFailureSummary = result.failureSummary;
       context.log(
         '✅ FAIL_TO_PASS verified: Red test failed as expected with exit code ${result.exitCode}.',
       );
@@ -321,38 +441,32 @@ class PackageHarness {
     }
 
     final String targetDir = context.resolvePackagePath();
-    final String relativeTestFile =
-        context.testFilePath ??
-        (context.packageName == 'in_app_purchase_storekit'
-            ? 'test/in_app_purchase_storekit_2_platform_test.dart'
-            : 'test/${context.packageName}_test.dart');
+    final String relativeTestFile = context.testFilePath ?? _defaultTestFilePath;
 
     final int maxAttempts = context.skipAgent ? 1 : context.maxRetries;
     String? lastFailureReason;
+    context.state.resetAttemptHistory();
 
-    final initialSnapshots = <String, String>{};
-    final candidateFiles = <String>[
-      'pigeons/sk2_pigeon.dart',
-      'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/StoreKit2Translators.swift',
-      'lib/src/store_kit_2_wrappers/sk2_transaction_wrapper.dart',
-      'test/fakes/fake_storekit_platform.dart',
-    ];
+    // Baseline for reverting between attempts. Untracked files present now are
+    // the developer's and must survive; anything the agent creates must not.
+    final Set<String> baselineUntracked = await _untrackedFiles(targetDir);
 
-    for (final relPath in candidateFiles) {
-      final file = File('$targetDir/$relPath');
-      if (file.existsSync()) {
-        initialSnapshots[relPath] = file.readAsStringSync();
-      }
-    }
+    // The red test as verified in phase 1. Re-pinned before every test run so a
+    // fix cannot pass by weakening the test that judges it.
+    final String resolvedTestPath = resolvePath(targetDir, relativeTestFile);
+    final String? verifiedRedTest = File(resolvedTestPath).existsSync()
+        ? File(resolvedTestPath).readAsStringSync()
+        : null;
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       context.log('Implementation attempt $attempt of $maxAttempts...');
 
       if (!context.skipAgent) {
-        // Revert files to clean baseline before each attempt
-        for (final MapEntry<String, String> entry in initialSnapshots.entries) {
-          final file = File('$targetDir/${entry.key}');
-          file.writeAsStringSync(entry.value);
+        // Revert to the committed baseline before each attempt, so one
+        // attempt's edits never leak into the next.
+        await _revertWorkspace(targetDir, baselineUntracked);
+        if (verifiedRedTest != null) {
+          _restoreRedTest(targetDir, relativeTestFile, verifiedRedTest);
         }
 
         context.log(
@@ -364,13 +478,53 @@ class PackageHarness {
           for (final FilePatch patch in fix.patches) {
             context.log('  - ${patch.filePath} (${patch.content.length} chars)');
           }
+
+          // Generated files must come from the generator. Checked here on the
+          // proposed patches rather than on the final diff, because codegen
+          // rewrites these files legitimately a few lines below.
+          final String? generatedFileError = DefaultGuardrailValidator.checkGeneratedFiles(
+            fix.patches.map((FilePatch patch) => patch.filePath),
+          );
+          if (generatedFileError != null) {
+            lastFailureReason = generatedFileError;
+            context.log('⚠️ Attempt $attempt rejected: $lastFailureReason');
+            context.state.recordAttemptFailure(generatedFileError);
+            context.recordArtifact(
+              'implementation_attempt_${attempt}_edited_generated_file.txt',
+              generatedFileError,
+            );
+            if (_shouldStopRetrying(attempt, maxAttempts)) {
+              break;
+            }
+            continue;
+          }
         } catch (e) {
           lastFailureReason = 'Agent failed to generate implementation fix: $e';
           context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-          context.lastTestFailureSummary =
-              'The previous implementation attempt failed: $e\n'
-              'Please ensure every search_block is an exact snippet copied directly from the provided source files without altering parameter modifiers.';
+          context.state.recordAttemptFailure(
+            '$lastFailureReason\n'
+            'Please ensure every search_block is an exact snippet copied directly from the provided source files without altering parameter modifiers.',
+          );
+          if (_shouldStopRetrying(attempt, maxAttempts)) {
+            break;
+          }
           continue;
+        }
+
+        // The fix may have patched the test file. Put the verified red test
+        // back before it is used as the pass/fail gate.
+        if (verifiedRedTest != null &&
+            _restoreRedTest(targetDir, relativeTestFile, verifiedRedTest)) {
+          context.log(
+            '⚠️ The implementation patch modified the red test; restored the verified '
+            'version. A fix must satisfy the test, not rewrite it.',
+          );
+          context.recordArtifact(
+            'implementation_attempt_${attempt}_modified_red_test.txt',
+            'The generated fix patched $relativeTestFile. The verified red test was '
+                'restored before running, so this attempt was judged against the '
+                'original test.',
+          );
         }
       }
 
@@ -387,11 +541,14 @@ class PackageHarness {
                     '${codeGenResult.stderr}\n${codeGenResult.stdout}'
                 .trim();
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-        context.lastTestFailureSummary = lastFailureReason;
+        context.state.recordAttemptFailure(lastFailureReason);
         context.recordArtifact(
           'implementation_attempt_${attempt}_codegen_failure.txt',
           lastFailureReason,
         );
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
         continue;
       }
 
@@ -407,11 +564,14 @@ class PackageHarness {
             'PASS_TO_PASS Invariant Violated: Target test is still failing after implementation:\n'
             '${targetResult.failureSummary}';
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-        context.lastTestFailureSummary = targetResult.failureSummary;
+        context.state.recordAttemptFailure(targetResult.failureSummary);
         context.recordArtifact(
           'implementation_attempt_${attempt}_target_test_failure.txt',
           targetResult.failureSummary,
         );
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
         continue;
       }
 
@@ -426,11 +586,14 @@ class PackageHarness {
             'Regression detected: Package test suite failed after implementation:\n'
             '${suiteResult.failureSummary}';
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-        context.lastTestFailureSummary = suiteResult.failureSummary;
+        context.state.recordAttemptFailure(suiteResult.failureSummary);
         context.recordArtifact(
           'implementation_attempt_${attempt}_regression_failure.txt',
           suiteResult.failureSummary,
         );
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
         continue;
       }
 
@@ -445,11 +608,14 @@ class PackageHarness {
         lastFailureReason =
             'Static analysis or guardrail check failed:\n${validationResult.failureReason}';
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
-        context.lastTestFailureSummary = validationResult.failureReason;
+        context.state.recordAttemptFailure(validationResult.failureReason ?? 'Validation failed');
         context.recordArtifact(
           'implementation_attempt_${attempt}_validation_failure.txt',
           validationResult.failureReason ?? 'Validation failed',
         );
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
         continue;
       }
 
@@ -466,20 +632,10 @@ class PackageHarness {
       return;
     }
 
-    // Revert files to clean baseline on failure
-    for (final MapEntry<String, String> entry in initialSnapshots.entries) {
-      final file = File('$targetDir/${entry.key}');
-      file.writeAsStringSync(entry.value);
-    }
-    if (context.initialTestFileContent != null && context.testFilePath != null) {
-      final testFile = File(
-        File(context.testFilePath!).isAbsolute
-            ? context.testFilePath!
-            : '$targetDir/${context.testFilePath!}',
-      );
-      if (testFile.existsSync()) {
-        testFile.writeAsStringSync(context.initialTestFileContent!);
-      }
+    // Leave nothing behind on failure. The git revert also removes the red
+    // test, returning the package to its committed state.
+    if (!context.skipAgent) {
+      await _revertWorkspace(targetDir, baselineUntracked);
     }
 
     context.failureReason =

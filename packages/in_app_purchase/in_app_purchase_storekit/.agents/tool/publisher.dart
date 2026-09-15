@@ -73,16 +73,44 @@ class DraftPrMetadata {
       buffer.writeln();
     }
 
-    buffer.writeln('## SWE-bench Autonomous Verification Checklist');
-    buffer.writeln('- [x] **FAIL_TO_PASS**: Reproduction unit test failed on clean main.');
+    // No verification checklist: every box would always be ticked, because the
+    // harness aborts rather than publishing when a gate fails. A list of things
+    // that are true by construction adds length without adding information.
+    // What a reviewer cannot derive is how the test failed beforehand, so that
+    // is what gets reported instead.
     buffer.writeln(
-      '- [x] **PASS_TO_PASS**: Target unit test passes after code change & Pigeon codegen.',
+      'Verified by the autonomous harness: the reproduction test below failed on a '
+      'clean checkout, then passed after this change, with no regressions and clean '
+      'static analysis. `pubspec.yaml` and `CHANGELOG.md` are deliberately untouched. '
+      'See `.agents/README.md` for what this does and does not guarantee.',
     );
-    buffer.writeln('- [x] **Zero Regressions**: Full package test suite verified green.');
-    buffer.writeln('- [x] **Static Analysis**: `dart analyze` reported 0 issues.');
-    buffer.writeln('- [x] **Formatting**: Fully formatted with `dart format`.');
-    buffer.writeln('- [x] **Monorepo Invariant**: `pubspec.yaml` and `CHANGELOG.md` untouched.');
     buffer.writeln();
+
+    // The summary above asserts the test failed first; this shows *how*. A red
+    // test can fail for the wrong reason (a typo, a hallucinated API, a bad
+    // assertion), and the implementation phase would then faithfully satisfy a
+    // wrong specification. Surfacing the output lets a reviewer judge that in
+    // seconds instead of digging through run artifacts.
+    final String? redFailure = context.state.verifiedRedFailureSummary;
+    if (redFailure != null && redFailure.trim().isNotEmpty) {
+      const maxLength = 2000;
+      final String trimmed = redFailure.trim();
+      final excerpt = trimmed.length > maxLength
+          ? '${trimmed.substring(0, maxLength)}\n... (truncated, see run logs)'
+          : trimmed;
+
+      buffer.writeln('<details>');
+      buffer.writeln(
+        '<summary><b>Verified failure before the fix</b> '
+        '(how the reproduction test failed on clean main)</summary>',
+      );
+      buffer.writeln();
+      buffer.writeln('```');
+      buffer.writeln(excerpt);
+      buffer.writeln('```');
+      buffer.writeln('</details>');
+      buffer.writeln();
+    }
     buffer.writeln('---');
     buffer.writeln('*Autonomous Draft PR created by `.agents/tool/harness.dart`*');
 
@@ -138,6 +166,12 @@ class GitHubPrPublisher implements PrPublisher {
     return startDir;
   }
 
+  /// Extracts stderr text from a completed process.
+  ///
+  /// `ProcessResult.stderr` is typed `dynamic`, so every call site would
+  /// otherwise repeat the same cast and null fallback.
+  static String _stderrOf(ProcessResult result) => result.stderr as String? ?? '';
+
   @override
   Future<PrPublishResult> publishDraftPr(HarnessContext context) async {
     final metadata = DraftPrMetadata.fromContext(context);
@@ -184,7 +218,7 @@ class GitHubPrPublisher implements PrPublisher {
     ], workingDirectory: gitWorkingDir);
 
     if (branchResult.exitCode != 0) {
-      final String stderr = branchResult.stderr as String? ?? '';
+      final String stderr = _stderrOf(branchResult);
       return PrPublishResult(
         success: false,
         stderr: stderr,
@@ -217,7 +251,7 @@ class GitHubPrPublisher implements PrPublisher {
         workingDirectory: gitWorkingDir,
       );
       if (addResult.exitCode != 0) {
-        final String stderr = addResult.stderr as String? ?? '';
+        final String stderr = _stderrOf(addResult);
         return PrPublishResult(
           success: false,
           stderr: stderr,
@@ -235,7 +269,7 @@ class GitHubPrPublisher implements PrPublisher {
     ], workingDirectory: gitWorkingDir);
 
     if (commitResult.exitCode != 0) {
-      final String stderr = commitResult.stderr as String? ?? '';
+      final String stderr = _stderrOf(commitResult);
       return PrPublishResult(
         success: false,
         stderr: stderr,
@@ -258,7 +292,7 @@ class GitHubPrPublisher implements PrPublisher {
     ], workingDirectory: gitWorkingDir);
 
     if (pushResult.exitCode != 0) {
-      final String firstStderr = pushResult.stderr as String? ?? '';
+      final String firstStderr = _stderrOf(pushResult);
       final bool isRejected =
           firstStderr.contains('non-fast-forward') || firstStderr.contains('rejected');
 
@@ -283,7 +317,7 @@ class GitHubPrPublisher implements PrPublisher {
       ], workingDirectory: gitWorkingDir);
 
       if (pushResult.exitCode != 0) {
-        final String stderr = pushResult.stderr as String? ?? '';
+        final String stderr = _stderrOf(pushResult);
         return PrPublishResult(
           success: false,
           stderr: stderr,
@@ -314,7 +348,7 @@ class GitHubPrPublisher implements PrPublisher {
 
     final ProcessResult prResult = await Process.run('gh', ghArgs, workingDirectory: gitWorkingDir);
     final String stdout = prResult.stdout as String? ?? '';
-    final String stderr = prResult.stderr as String? ?? '';
+    final String stderr = _stderrOf(prResult);
 
     if (prResult.exitCode != 0) {
       // On a re-run the branch already has an open PR. The push above already
@@ -398,7 +432,7 @@ class GitHubPrPublisher implements PrPublisher {
       ref,
     ], workingDirectory: workingDirectory);
     if (result.exitCode != 0) {
-      final String stderr = (result.stderr as String? ?? '').trim();
+      final String stderr = _stderrOf(result).trim();
       context.log(
         '⚠️ Could not return to "$ref"; the repository is still on '
         '"${current ?? 'the agent branch'}". Uncommitted changes were preserved '

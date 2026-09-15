@@ -245,6 +245,41 @@ void main() {
       expect(error, isNull);
     });
 
+    test('checkGeneratedFiles flags hand-edited Pigeon output', () {
+      final files = <String>[
+        'packages/in_app_purchase/in_app_purchase_storekit/lib/src/sk2_pigeon.g.dart',
+      ];
+      final String? error = DefaultGuardrailValidator.checkGeneratedFiles(files);
+
+      expect(error, isNotNull);
+      expect(error, contains('generated file'));
+      expect(error, contains('pigeons/sk2_pigeon.dart'));
+    });
+
+    test('checkGeneratedFiles flags generated Swift messages', () {
+      final files = <String>[
+        'packages/in_app_purchase/in_app_purchase_storekit/darwin/StoreKit2/StoreKit2Messages.g.swift',
+      ];
+
+      expect(DefaultGuardrailValidator.checkGeneratedFiles(files), isNotNull);
+    });
+
+    test('checkGeneratedFiles allows the Pigeon source of truth', () {
+      // The input to the generator is hand-edited by design; only its output
+      // is off-limits.
+      final files = <String>[
+        'packages/in_app_purchase/in_app_purchase_storekit/pigeons/sk2_pigeon.dart',
+        'packages/in_app_purchase/in_app_purchase_storekit/lib/src/sk2_transaction_wrapper.dart',
+      ];
+
+      expect(DefaultGuardrailValidator.checkGeneratedFiles(files), isNull);
+    });
+
+    test('isGeneratedFile does not match names that merely start with g', () {
+      expect(DefaultGuardrailValidator.isGeneratedFile('lib/src/graphql_client.dart'), isFalse);
+      expect(DefaultGuardrailValidator.isGeneratedFile('lib/src/foo.g.dart'), isTrue);
+    });
+
     test('checkPackageBoundary flags modifications outside target package', () {
       final files = <String>['packages/camera/camera_android/lib/camera.dart'];
       final String? error = DefaultGuardrailValidator.checkPackageBoundary(
@@ -671,34 +706,29 @@ void main() {
 ''');
 
       final List<String> models = resolveFallbackModels(packageDir: tempDir.path);
-      expect(models, <String>[
-        'gemini-3.7-flash',
-        'gemini-pro-latest',
-        'gemini-3.6-flash',
-      ]);
+      expect(models, <String>['gemini-3.7-flash', 'gemini-pro-latest', 'gemini-3.6-flash']);
 
       expect(resolveDefaultModel(packageDir: tempDir.path), 'gemini-3.6-flash');
     });
 
     test('resolveFallbackModels returns defaults when config file is missing', () {
       final List<String> defaults = resolveFallbackModels(packageDir: '/non_existent_path');
-      expect(defaults, <String>[
-        'gemini-3.7-flash',
-        'gemini-pro-latest',
-        'gemini-3.6-flash',
-      ]);
+      expect(defaults, <String>['gemini-3.7-flash', 'gemini-pro-latest', 'gemini-3.6-flash']);
     });
 
-    test('HarnessContext resolves package directory and loads model and fallovers from config.json', () {
-      final context = HarnessContext(issueNumber: 3, isDryRun: true);
-      expect(context.model, 'gemini-3.6-flash');
-      expect(context.fallbackModels, <String>[
-        'gemini-pro-latest',
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-      ]);
-      expect(context.maxRetries, 5);
-    });
+    test(
+      'HarnessContext resolves package directory and loads model and fallovers from config.json',
+      () {
+        final context = HarnessContext(issueNumber: 3, isDryRun: true);
+        expect(context.model, 'gemini-3.6-flash');
+        expect(context.fallbackModels, <String>[
+          'gemini-pro-latest',
+          'gemini-3.7-flash',
+          'gemini-3.6-flash',
+        ]);
+        expect(context.maxRetries, 5);
+      },
+    );
 
     test('injectTestCode inserts test block before final closing brace', () {
       const original = 'void main() {\n  test("existing", () {});\n}\n';
@@ -764,21 +794,24 @@ void main() {
       );
     });
 
-    test('applyTargetedEdit matches even with leading and trailing blank lines in search block', () {
-      const original = 'class Foo {\n  final int a;\n  final int b;\n}\n';
-      const searchWithBlankLines = '\n\n  final int b;\n\n';
-      const replace = '  final int b;\n  final int c;';
+    test(
+      'applyTargetedEdit matches even with leading and trailing blank lines in search block',
+      () {
+        const original = 'class Foo {\n  final int a;\n  final int b;\n}\n';
+        const searchWithBlankLines = '\n\n  final int b;\n\n';
+        const replace = '  final int b;\n  final int c;';
 
-      final String result = applyTargetedEdit(
-        originalContent: original,
-        searchBlock: searchWithBlankLines,
-        replaceBlock: replace,
-        filePath: 'lib/foo.dart',
-      );
-      expect(result, 'class Foo {\n  final int a;\n  final int b;\n  final int c;\n}\n');
-    });
+        final String result = applyTargetedEdit(
+          originalContent: original,
+          searchBlock: searchWithBlankLines,
+          replaceBlock: replace,
+          filePath: 'lib/foo.dart',
+        );
+        expect(result, 'class Foo {\n  final int a;\n  final int b;\n  final int c;\n}\n');
+      },
+    );
 
-    test('handleRedTest retries up to maxRetries when test passes on clean main', () async {
+    test('handleRedTest stops early when attempts keep failing identically', () async {
       final context = HarnessContext(
         issueNumber: 3,
         isDryRun: false,
@@ -795,12 +828,14 @@ void main() {
       final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
       await harness.handleRedTest();
 
+      // The agent produces the same test every time, so attempts 3 through 5
+      // would be identical resamples. Each one costs a model call and a test
+      // run, so the loop gives up once the failure repeats.
       expect(context.currentPhase, HarnessPhase.failed);
       expect(context.logs, contains(contains('Red test attempt 1 of 5')));
       expect(context.logs, contains(contains('Red test attempt 2 of 5')));
-      expect(context.logs, contains(contains('Red test attempt 3 of 5')));
-      expect(context.logs, contains(contains('Red test attempt 4 of 5')));
-      expect(context.logs, contains(contains('Red test attempt 5 of 5')));
+      expect(context.logs, isNot(contains(contains('Red test attempt 3 of 5'))));
+      expect(context.logs, contains(contains('failed the same way as the previous attempt')));
       expect(context.failureReason, contains('FAIL_TO_PASS Invariant Violated'));
     });
 
@@ -832,7 +867,7 @@ void main() {
       expect(context.logs, contains(contains('FAIL_TO_PASS verified')));
     });
 
-    test('handleImplementation retries up to maxRetries (5 times) on failure before failing', () async {
+    test('handleImplementation stops early when attempts keep failing identically', () async {
       final context = HarnessContext(
         issueNumber: 3,
         isDryRun: false,
@@ -857,15 +892,88 @@ void main() {
       );
       await harness.handleImplementation();
 
+      // Codegen fails identically every time, so the remaining attempts would
+      // each burn a model call and a full suite run to learn nothing.
       expect(context.currentPhase, HarnessPhase.failed);
-      expect(mockAgent.generateFixCallCount, 5);
-      expect(mockGen.generateCallCount, 5);
+      expect(mockAgent.generateFixCallCount, 2);
+      expect(mockGen.generateCallCount, 2);
       expect(context.logs, contains(contains('Implementation attempt 1 of 5')));
       expect(context.logs, contains(contains('Implementation attempt 2 of 5')));
-      expect(context.logs, contains(contains('Implementation attempt 3 of 5')));
-      expect(context.logs, contains(contains('Implementation attempt 4 of 5')));
-      expect(context.logs, contains(contains('Implementation attempt 5 of 5')));
+      expect(context.logs, isNot(contains(contains('Implementation attempt 3 of 5'))));
       expect(context.failureReason, contains('Code generation failed'));
+    });
+
+    test('handleImplementation uses the full retry budget when each failure differs', () async {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+      context.transitionTo(HarnessPhase.redTest);
+      context.transitionTo(HarnessPhase.implementation);
+
+      final mockAgent = MockHarnessAgent();
+      final mockGen = MockCodeGenerator(
+        const CodeGenResult(exitCode: 1, stdout: '', stderr: 'Syntax error'),
+        failAttemptsCount: 10,
+        varyFailures: true,
+      );
+      final mockRunner = MockTestRunner(const TestRunResult(exitCode: 0, stdout: '', stderr: ''));
+
+      final harness = PackageHarness(
+        context,
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+        agent: mockAgent,
+      );
+      await harness.handleImplementation();
+
+      // Each attempt fails differently, which is evidence the agent is still
+      // exploring. Early abort must not cut that short.
+      expect(context.currentPhase, HarnessPhase.failed);
+      expect(mockGen.generateCallCount, 5);
+      expect(context.logs, contains(contains('Implementation attempt 5 of 5')));
+      expect(
+        context.logs,
+        isNot(contains(contains('failed the same way as the previous attempt'))),
+      );
+    });
+
+    test('handleImplementation rejects a fix that edits a generated file', () async {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+      context.transitionTo(HarnessPhase.redTest);
+      context.transitionTo(HarnessPhase.implementation);
+
+      final mockAgent = MockHarnessAgent(
+        fixToReturn: const ImplementationFix(
+          summary: 'Edit the generated Pigeon output directly',
+          patches: <FilePatch>[
+            FilePatch(filePath: 'lib/src/sk2_pigeon.g.dart', content: '// hand edited'),
+          ],
+        ),
+      );
+      final mockGen = MockCodeGenerator(const CodeGenResult(exitCode: 0, stdout: '', stderr: ''));
+      final mockRunner = MockTestRunner(const TestRunResult(exitCode: 0, stdout: '', stderr: ''));
+
+      final harness = PackageHarness(
+        context,
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+        agent: mockAgent,
+      );
+      await harness.handleImplementation();
+
+      // Rejected before code generation runs, which would otherwise overwrite
+      // the hand edit and hide that it ever happened.
+      expect(context.currentPhase, HarnessPhase.failed);
+      expect(context.failureReason, contains('generated file'));
+      expect(mockGen.generateCallCount, 0);
     });
 
     test('handleImplementation recovers on attempt 2 when attempt 1 fails codegen', () async {
@@ -904,42 +1012,49 @@ void main() {
       expect(context.logs, contains(contains('(attempt 2/5)')));
     });
 
-    test('handleImplementation recovers on attempt 2 when attempt 1 fails static analysis', () async {
-      final context = HarnessContext(
-        issueNumber: 3,
-        isDryRun: false,
-        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
-        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
-      );
-      context.transitionTo(HarnessPhase.redTest);
-      context.transitionTo(HarnessPhase.implementation);
+    test(
+      'handleImplementation recovers on attempt 2 when attempt 1 fails static analysis',
+      () async {
+        final context = HarnessContext(
+          issueNumber: 3,
+          isDryRun: false,
+          testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+          issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+        );
+        context.transitionTo(HarnessPhase.redTest);
+        context.transitionTo(HarnessPhase.implementation);
 
-      final mockAgent = MockHarnessAgent();
-      final mockGen = MockCodeGenerator(const CodeGenResult(exitCode: 0, stdout: 'Generated', stderr: ''));
-      final mockRunner = MockTestRunner(const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''));
-      final mockValidator = MockGuardrailValidator(
-        const ValidationResult(isValid: true, modifiedFiles: <String>['pigeons/sk2_pigeon.dart']),
-        failAttemptsCount: 1,
-      );
+        final mockAgent = MockHarnessAgent();
+        final mockGen = MockCodeGenerator(
+          const CodeGenResult(exitCode: 0, stdout: 'Generated', stderr: ''),
+        );
+        final mockRunner = MockTestRunner(
+          const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''),
+        );
+        final mockValidator = MockGuardrailValidator(
+          const ValidationResult(isValid: true, modifiedFiles: <String>['pigeons/sk2_pigeon.dart']),
+          failAttemptsCount: 1,
+        );
 
-      final harness = PackageHarness(
-        context,
-        testRunner: mockRunner,
-        codeGenerator: mockGen,
-        validator: mockValidator,
-        agent: mockAgent,
-      );
-      await harness.handleImplementation();
+        final harness = PackageHarness(
+          context,
+          testRunner: mockRunner,
+          codeGenerator: mockGen,
+          validator: mockValidator,
+          agent: mockAgent,
+        );
+        await harness.handleImplementation();
 
-      expect(context.currentPhase, HarnessPhase.validation);
-      expect(mockAgent.generateFixCallCount, 2);
-      expect(mockValidator.validateCallCount, 2);
-      expect(context.logs, contains(contains('⚠️ Attempt 1 failed')));
-      expect(context.logs, contains(contains('Static analysis or guardrail check failed')));
-      expect(context.logs, contains(contains('Implementation attempt 2 of 5')));
-      expect(context.logs, contains(contains('PASS_TO_PASS verified')));
-      expect(context.logs, contains(contains('(attempt 2/5)')));
-    });
+        expect(context.currentPhase, HarnessPhase.validation);
+        expect(mockAgent.generateFixCallCount, 2);
+        expect(mockValidator.validateCallCount, 2);
+        expect(context.logs, contains(contains('⚠️ Attempt 1 failed')));
+        expect(context.logs, contains(contains('Static analysis or guardrail check failed')));
+        expect(context.logs, contains(contains('Implementation attempt 2 of 5')));
+        expect(context.logs, contains(contains('PASS_TO_PASS verified')));
+        expect(context.logs, contains(contains('(attempt 2/5)')));
+      },
+    );
 
     test('handleImplementation respects custom maxRetries parameter', () async {
       final context = HarnessContext(
@@ -977,7 +1092,8 @@ void main() {
         isDryRun: false,
         issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
         issueBody: 'Please expose originalPurchaseDate.',
-        redTestCode: "test('should expose originalPurchaseDate', () async {\n  expect(tx.originalPurchaseDate, isNotNull);\n});",
+        redTestCode:
+            "test('should expose originalPurchaseDate', () async {\n  expect(tx.originalPurchaseDate, isNotNull);\n});",
       );
       context.lastTestFailureSummary =
           "test/test.dart:42:5: Error: The getter 'originalPurchaseDate' isn't defined.\n"
@@ -993,7 +1109,10 @@ void main() {
       expect(prompt, contains('REPRODUCTION TEST THAT FAILED:'));
       expect(prompt, contains("test('should expose originalPurchaseDate'"));
       expect(prompt, contains('TEST FAILURE & STACK TRACE:'));
-      expect(prompt, contains("test/test.dart:42:5: Error: The getter 'originalPurchaseDate' isn't defined."));
+      expect(
+        prompt,
+        contains("test/test.dart:42:5: Error: The getter 'originalPurchaseDate' isn't defined."),
+      );
       expect(prompt, contains('test/test.dart 42:5  main.<fn>'));
       expect(prompt, contains('SOURCE FILES:'));
     });
@@ -1013,32 +1132,39 @@ void main() {
       expect(prompt, contains('Assertion failed'));
     });
 
-    test('handleRedTest captures redTestCode and saves it as artifact on failure verification', () async {
-      final context = HarnessContext(
-        issueNumber: 3,
-        isDryRun: false,
-        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
-        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
-      );
-      context.transitionTo(HarnessPhase.redTest);
+    test(
+      'handleRedTest captures redTestCode and saves it as artifact on failure verification',
+      () async {
+        final context = HarnessContext(
+          issueNumber: 3,
+          isDryRun: false,
+          testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+          issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+        );
+        context.transitionTo(HarnessPhase.redTest);
 
-      final mockAgent = MockHarnessAgent();
-      final mockRunner = MockTestRunner(
-        const TestRunResult(
-          exitCode: 1,
-          stdout: 'Expected: <true>\n  Actual: <false>\n  test/in_app_purchase_storekit_2_platform_test.dart 42:5  main.<fn>',
-          stderr: '',
-        ),
-      );
+        final mockAgent = MockHarnessAgent();
+        final mockRunner = MockTestRunner(
+          const TestRunResult(
+            exitCode: 1,
+            stdout:
+                'Expected: <true>\n  Actual: <false>\n  test/in_app_purchase_storekit_2_platform_test.dart 42:5  main.<fn>',
+            stderr: '',
+          ),
+        );
 
-      final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
-      await harness.handleRedTest();
+        final harness = PackageHarness(context, testRunner: mockRunner, agent: mockAgent);
+        await harness.handleRedTest();
 
-      expect(context.redTestCode, isNotNull);
-      expect(context.debugArtifacts, contains('red_test_attempt_1_code.dart'));
-      expect(context.debugArtifacts['red_test_attempt_1_code.dart'], context.redTestCode);
-      expect(context.lastTestFailureSummary, contains('test/in_app_purchase_storekit_2_platform_test.dart 42:5'));
-    });
+        expect(context.redTestCode, isNotNull);
+        expect(context.debugArtifacts, contains('red_test_attempt_1_code.dart'));
+        expect(context.debugArtifacts['red_test_attempt_1_code.dart'], context.redTestCode);
+        expect(
+          context.lastTestFailureSummary,
+          contains('test/in_app_purchase_storekit_2_platform_test.dart 42:5'),
+        );
+      },
+    );
   });
 
   group('Step 6: PrPublisher & Draft PR Automation', () {
@@ -1065,8 +1191,40 @@ void main() {
         metadata.body,
         contains('`lib/src/store_kit_2_wrappers/sk2_transaction_wrapper.dart`'),
       );
-      expect(metadata.body, contains('- [x] **FAIL_TO_PASS**'));
-      expect(metadata.body, contains('- [x] **Monorepo Invariant**'));
+      expect(metadata.body, contains('Verified by the autonomous harness'));
+      expect(metadata.body, contains('.agents/README.md'));
+      // The checklist was removed: every box was true by construction, since a
+      // failed gate aborts instead of publishing.
+      expect(metadata.body, isNot(contains('- [x]')));
+    });
+
+    test('DraftPrMetadata includes the verified red failure as review evidence', () {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+      context.state.verifiedRedFailureSummary =
+          "Error: The getter 'originalPurchaseDate' isn't defined for the class 'SK2Transaction'.";
+
+      final metadata = DraftPrMetadata.fromContext(context);
+
+      // Lets a reviewer confirm the test failed for the right reason, rather
+      // than merely that it failed.
+      expect(metadata.body, contains('Verified failure before the fix'));
+      expect(metadata.body, contains("The getter 'originalPurchaseDate' isn't defined"));
+    });
+
+    test('DraftPrMetadata omits the evidence block when no failure was captured', () {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+
+      final metadata = DraftPrMetadata.fromContext(context);
+
+      expect(metadata.body, isNot(contains('Verified failure before the fix')));
     });
 
     test(
@@ -1273,11 +1431,7 @@ void main() {
         }
       });
 
-      final context = HarnessContext(
-        issueNumber: 42,
-        isDryRun: true,
-        issueTitle: 'Successful Run',
-      );
+      final context = HarnessContext(issueNumber: 42, isDryRun: true, issueTitle: 'Successful Run');
       context.customLogParentDirectory = tempDir.path;
 
       final harness = PackageHarness(context);
@@ -1413,10 +1567,14 @@ class MockGuardrailValidator implements GuardrailValidator {
 }
 
 class MockCodeGenerator implements CodeGenerator {
-  MockCodeGenerator(this.resultToReturn, {this.failAttemptsCount = 0});
+  MockCodeGenerator(this.resultToReturn, {this.failAttemptsCount = 0, this.varyFailures = false});
 
   final CodeGenResult resultToReturn;
   final int failAttemptsCount;
+
+  /// Whether each failure should differ, simulating an agent that tries
+  /// something genuinely new each attempt rather than repeating itself.
+  final bool varyFailures;
   int generateCallCount = 0;
   String? lastGeneratedPackagePath;
   String? lastGeneratedPackageName;
@@ -1427,10 +1585,16 @@ class MockCodeGenerator implements CodeGenerator {
     lastGeneratedPackagePath = packagePath;
     lastGeneratedPackageName = packageName;
     if (generateCallCount <= failAttemptsCount) {
-      return const CodeGenResult(
+      return CodeGenResult(
         exitCode: 1,
         stdout: '',
-        stderr: 'Pigeon syntax error on attempt',
+        stderr: varyFailures
+            // Varies by symbol name, not by a number: digits are normalized
+            // away when comparing failures, since line numbers and durations
+            // shift without the underlying failure changing.
+            ? 'Pigeon syntax error: unexpected token '
+                  '"${String.fromCharCode(96 + generateCallCount)}Symbol"'
+            : 'Pigeon syntax error on attempt',
       );
     }
     return resultToReturn;

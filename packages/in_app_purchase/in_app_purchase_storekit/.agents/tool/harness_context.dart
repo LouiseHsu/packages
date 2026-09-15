@@ -142,7 +142,20 @@ class RunState {
   String? failureReason;
 
   /// Summary of the most recent test failure output.
+  ///
+  /// This is the feedback handed to the agent for its next attempt, so it
+  /// includes a digest of earlier attempts as well as the latest failure.
   String? lastTestFailureSummary;
+
+  /// The failure output captured when the red test was verified to fail.
+  ///
+  /// Held separately from [lastTestFailureSummary], which is overwritten
+  /// repeatedly during implementation. This is the evidence that the bug was
+  /// real, so it survives to be reported in the Draft PR.
+  String? verifiedRedFailureSummary;
+
+  /// Failure summaries from previous attempts within the current phase.
+  final List<String> attemptFailures = <String>[];
 
   /// The original unmodified content of the target test file before execution.
   String? initialTestFileContent;
@@ -180,6 +193,61 @@ class RunState {
         return false;
     }
   }
+
+  /// Records [summary] as the failure of the attempt that just finished.
+  ///
+  /// Also rebuilds [lastTestFailureSummary] to include a digest of earlier
+  /// attempts. Without this the agent only ever sees the previous failure, so
+  /// it cannot tell that it has already tried and failed the same way twice.
+  void recordAttemptFailure(String summary) {
+    attemptFailures.add(summary);
+
+    if (attemptFailures.length == 1) {
+      lastTestFailureSummary = summary;
+      return;
+    }
+
+    final buffer = StringBuffer()
+      ..writeln('Attempt ${attemptFailures.length} failed:')
+      ..writeln(summary)
+      ..writeln()
+      ..writeln(
+        'You have already tried and failed the following approaches. '
+        'Do not repeat them:',
+      );
+    for (var i = 0; i < attemptFailures.length - 1; i++) {
+      final String previous = attemptFailures[i];
+      final condensed = previous.length > 300 ? '${previous.substring(0, 300)}...' : previous;
+      buffer.writeln('- Attempt ${i + 1}: ${condensed.replaceAll('\n', ' ')}');
+    }
+    lastTestFailureSummary = buffer.toString();
+  }
+
+  /// Whether the last two attempts failed in effectively the same way.
+  ///
+  /// Retries only help when each attempt explores something new. Once the same
+  /// failure repeats, further attempts are near-certain to be more samples of
+  /// the same misconception, and each one costs a full test suite run.
+  bool get isRepeatingFailure {
+    if (attemptFailures.length < 2) {
+      return false;
+    }
+    return _normalize(attemptFailures[attemptFailures.length - 1]) ==
+        _normalize(attemptFailures[attemptFailures.length - 2]);
+  }
+
+  /// Clears attempt history when moving between phases.
+  ///
+  /// Red test failures are not useful feedback for implementation attempts.
+  void resetAttemptHistory() {
+    attemptFailures.clear();
+    lastTestFailureSummary = null;
+  }
+
+  /// Strips incidental variation so two reports of the same failure compare
+  /// equal. Numbers cover line numbers, durations, and attempt counters.
+  static String _normalize(String summary) =>
+      summary.toLowerCase().replaceAll(RegExp(r'\d+'), '#').replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 /// Collects log output and debug artifacts for a run, and persists them.

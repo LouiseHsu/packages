@@ -47,6 +47,28 @@ class DefaultGuardrailValidator implements GuardrailValidator {
     return null;
   }
 
+  /// Whether [path] is a generated file, by the `.g.` naming convention used
+  /// by Pigeon and `build_runner` (e.g. `sk2_pigeon.g.dart`,
+  /// `StoreKit2Messages.g.swift`).
+  static bool isGeneratedFile(String path) => path.split('/').last.contains('.g.');
+
+  /// Rejects direct edits to generated files.
+  ///
+  /// Intended for the agent's proposed patches, **not** for the final diff:
+  /// running Pigeon legitimately rewrites these files, so a diff-level check
+  /// would fail every successful run. The rule is that generated output must
+  /// come from the generator, never from the model.
+  static String? checkGeneratedFiles(Iterable<String> filePaths) {
+    for (final path in filePaths) {
+      if (isGeneratedFile(path)) {
+        return 'Guardrail Invariant Violated: "$path" is a generated file and must not be '
+            'edited directly. Change the source of truth instead (for example '
+            '`pigeons/sk2_pigeon.dart`) and let code generation produce this file.';
+      }
+    }
+    return null;
+  }
+
   /// Ensures that all modified code files belong to the target package.
   static String? checkPackageBoundary(Iterable<String> filePaths, {required String packageName}) {
     for (final path in filePaths) {
