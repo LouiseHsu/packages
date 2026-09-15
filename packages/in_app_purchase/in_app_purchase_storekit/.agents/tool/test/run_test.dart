@@ -307,5 +307,59 @@ void main() {
       expect(exitCode, 1);
       expect(errLogs.any((String line) => line.contains('Pipeline failed in phase HarnessPhase.failed: Max retries exceeded')), isTrue);
     });
+
+    test('returns exit code 1 when the fix is verified but the Draft PR fails to publish', () async {
+      final logs = <String>[];
+      final errLogs = <String>[];
+
+      final int exitCode = await runPipeline(
+        <String>[
+          '--issue=7',
+          '--title=Expose originalPurchaseDate in SK2Transaction',
+          '--skip-triage',
+          '--publish-pr',
+        ],
+        harnessRunner: (HarnessContext context) async {
+          // Verification succeeded, but publishing did not.
+          context.prPublishFailureReason = 'Failed to stage files: pathspec did not match';
+          return HarnessPhase.complete;
+        },
+        logger: logs.add,
+        errorLogger: errLogs.add,
+      );
+
+      expect(exitCode, 1);
+      expect(
+        errLogs.any((String line) => line.contains('Failed to stage files')),
+        isTrue,
+        reason: 'The publish failure reason must be surfaced to stderr.',
+      );
+      expect(
+        logs.any((String line) => line.contains('PIPELINE SUCCESS')),
+        isFalse,
+        reason: 'A run with no published PR must not be reported as a success.',
+      );
+    });
+
+    test('returns exit code 0 on publish failure when --publish-pr was not requested', () async {
+      final logs = <String>[];
+
+      final int exitCode = await runPipeline(
+        <String>[
+          '--issue=7',
+          '--title=Expose originalPurchaseDate in SK2Transaction',
+          '--skip-triage',
+        ],
+        harnessRunner: (HarnessContext context) async {
+          context.prPublishFailureReason = 'stale value that should be ignored';
+          return HarnessPhase.complete;
+        },
+        logger: logs.add,
+        errorLogger: (_) {},
+      );
+
+      expect(exitCode, 0);
+      expect(logs.any((String line) => line.contains('PIPELINE SUCCESS')), isTrue);
+    });
   });
 }

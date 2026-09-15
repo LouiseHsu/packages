@@ -456,6 +456,16 @@ Future<int> runPipeline(
   final HarnessPhase finalPhase = await runHarness(context);
 
   if (finalPhase == HarnessPhase.complete) {
+    // A verified fix with no PR is not a success when publishing was requested.
+    // Surface it as a failure so CI does not report a misleading green run.
+    if (options.publishPr && context.prPublishFailureReason != null) {
+      errLog('=================== PIPELINE FAILURE ===================');
+      errLog('🛑 Issue #$effectiveIssueNumber was resolved and verified, but the Draft PR '
+          'could not be published: ${context.prPublishFailureReason}');
+      errLog('The verified changes remain in the working tree.');
+      return 1;
+    }
+
     log('=================== PIPELINE SUCCESS ===================');
     log('🎉 Autonomous resolution completed successfully for issue #$effectiveIssueNumber!');
     if (options.publishPr && context.publishedPrUrl != null) {

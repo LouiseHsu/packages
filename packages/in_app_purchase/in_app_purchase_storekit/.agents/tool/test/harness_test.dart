@@ -1161,6 +1161,17 @@ void main() {
     );
 
     test('PackageHarness handles PR publishing failure gracefully', () async {
+      // Publish failures now persist diagnostics, so redirect them to a temp
+      // directory instead of polluting the package's real .agents/logs/.
+      final Directory tempLogDir = Directory.systemTemp.createTempSync(
+        'harness_pr_publish_failure_',
+      );
+      addTearDown(() {
+        if (tempLogDir.existsSync()) {
+          tempLogDir.deleteSync(recursive: true);
+        }
+      });
+
       final context = HarnessContext(
         issueNumber: 3,
         isDryRun: false,
@@ -1168,7 +1179,7 @@ void main() {
         publishPr: true,
         testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
         issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
-      );
+      )..customLogParentDirectory = tempLogDir.path;
 
       final mockRunner = MockTestRunner(
         const TestRunResult(exitCode: 1, stdout: 'Red test failed', stderr: ''),
@@ -1200,13 +1211,56 @@ void main() {
 
       final HarnessPhase finalPhase = await harness.run();
 
+      // The fix itself is verified, so the harness still reaches `complete`...
       expect(finalPhase, HarnessPhase.complete);
       expect(mockPublisher.publishedPr, isTrue);
       expect(context.publishedPrUrl, isNull);
+      // ...but the failure must be recorded so runPipeline can exit non-zero
+      // rather than reporting a misleading success.
+      expect(context.prPublishFailureReason, 'gh: authentication failed');
+      expect(context.debugArtifacts, contains('pr_publish_failure.txt'));
       expect(
         context.logs,
         contains(contains('Failed to publish Draft PR: gh: authentication failed')),
       );
+    });
+
+    test('PackageHarness records no publish failure when the PR succeeds', () async {
+      final context = HarnessContext(
+        issueNumber: 3,
+        isDryRun: false,
+        skipAgent: true,
+        publishPr: true,
+        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+        issueTitle: 'Expose originalPurchaseDate in SK2Transaction',
+      );
+
+      final mockRunner = MockTestRunner(
+        const TestRunResult(exitCode: 1, stdout: 'Red test failed', stderr: ''),
+        suiteResultToReturn: const TestRunResult(
+          exitCode: 0,
+          stdout: 'All tests passed',
+          stderr: '',
+        ),
+        resultToReturnNext: const TestRunResult(exitCode: 0, stdout: 'Passed', stderr: ''),
+      );
+      final mockGen = MockCodeGenerator(const CodeGenResult(exitCode: 0, stdout: '', stderr: ''));
+      final mockValidator = MockGuardrailValidator(
+        const ValidationResult(isValid: true, modifiedFiles: <String>['lib/fix.dart']),
+      );
+      final mockPublisher = MockPrPublisher();
+
+      final harness = PackageHarness(
+        context,
+        testRunner: mockRunner,
+        codeGenerator: mockGen,
+        validator: mockValidator,
+        publisher: mockPublisher,
+      );
+
+      expect(await harness.run(), HarnessPhase.complete);
+      expect(context.prPublishFailureReason, isNull);
+      expect(context.publishedPrUrl, isNotNull);
     });
   });
 

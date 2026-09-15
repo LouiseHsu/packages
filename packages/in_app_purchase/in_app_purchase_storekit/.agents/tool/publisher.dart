@@ -36,12 +36,22 @@ class PrPublishResult {
 /// Metadata and markdown formatting for Draft PRs.
 class DraftPrMetadata {
   /// Creates a [DraftPrMetadata].
-  const DraftPrMetadata({required this.title, required this.branchName, required this.body});
+  const DraftPrMetadata({
+    required this.title,
+    required this.branchName,
+    required this.body,
+    this.baseBranch = defaultBaseBranch,
+  });
 
   /// Generates [DraftPrMetadata] formatted according to Flutter monorepo standards.
-  factory DraftPrMetadata.fromContext(HarnessContext context) {
+  ///
+  /// [baseBranch] defaults to the `AGENT_PR_BASE_BRANCH` environment variable when
+  /// set, so forks whose trunk is not `main` do not need a code change.
+  factory DraftPrMetadata.fromContext(HarnessContext context, {String? baseBranch}) {
     final title = '[${context.packageName}] ${context.issueTitle} (fixes #${context.issueNumber})';
     final branchName = 'agent/fix-issue-${context.issueNumber}';
+    final String resolvedBase =
+        baseBranch ?? Platform.environment['AGENT_PR_BASE_BRANCH'] ?? defaultBaseBranch;
 
     final buffer = StringBuffer();
     buffer.writeln('## Summary');
@@ -75,8 +85,16 @@ class DraftPrMetadata {
     buffer.writeln('---');
     buffer.writeln('*Autonomous Draft PR created by `.agents/tool/harness.dart`*');
 
-    return DraftPrMetadata(title: title, branchName: branchName, body: buffer.toString());
+    return DraftPrMetadata(
+      title: title,
+      branchName: branchName,
+      body: buffer.toString(),
+      baseBranch: resolvedBase,
+    );
   }
+
+  /// Branch that Draft PRs target when no override is supplied.
+  static const String defaultBaseBranch = 'main';
 
   /// The standardized commit and PR title.
   final String title;
@@ -86,6 +104,9 @@ class DraftPrMetadata {
 
   /// The markdown body of the PR.
   final String body;
+
+  /// The branch the Draft PR merges into.
+  final String baseBranch;
 }
 
 /// Interface for publishing Draft PRs to GitHub.
@@ -197,9 +218,14 @@ class GitHubPrPublisher implements PrPublisher {
       );
     }
 
-    // 4. Push branch to remote
+    // 4. Push branch to remote.
+    //
+    // Re-running the agent on the same issue rewrites `agent/fix-issue-<n>` via
+    // `checkout -B`, so a plain push is rejected as non-fast-forward. Retry with
+    // --force-with-lease, which replaces our own previous attempt but still
+    // refuses if someone else pushed to the branch since we last fetched it.
     context.log('Pushing branch ${metadata.branchName} to remote...');
-    final ProcessResult pushResult = await Process.run('git', <String>[
+    ProcessResult pushResult = await Process.run('git', <String>[
       'push',
       '-u',
       'origin',
@@ -207,12 +233,41 @@ class GitHubPrPublisher implements PrPublisher {
     ], workingDirectory: gitWorkingDir);
 
     if (pushResult.exitCode != 0) {
-      final String stderr = pushResult.stderr as String? ?? '';
-      return PrPublishResult(
-        success: false,
-        stderr: stderr,
-        failureReason: 'Failed to push branch to origin: $stderr',
+      final String firstStderr = pushResult.stderr as String? ?? '';
+      final bool isRejected =
+          firstStderr.contains('non-fast-forward') || firstStderr.contains('rejected');
+
+      if (!isRejected) {
+        return PrPublishResult(
+          success: false,
+          stderr: firstStderr,
+          failureReason: 'Failed to push branch to origin: $firstStderr',
+        );
+      }
+
+      context.log(
+        'Branch ${metadata.branchName} already exists on remote; retrying with '
+        '--force-with-lease (the previous agent attempt will be replaced)...',
       );
+      pushResult = await Process.run('git', <String>[
+        'push',
+        '--force-with-lease',
+        '-u',
+        'origin',
+        metadata.branchName,
+      ], workingDirectory: gitWorkingDir);
+
+      if (pushResult.exitCode != 0) {
+        final String stderr = pushResult.stderr as String? ?? '';
+        return PrPublishResult(
+          success: false,
+          stderr: stderr,
+          failureReason:
+              'Failed to push branch to origin. The remote branch ${metadata.branchName} has '
+              'diverged and was not overwritten (it may contain commits not made by this '
+              'agent): $stderr',
+        );
+      }
     }
 
     // 5. Create Draft PR via GitHub CLI
@@ -226,7 +281,7 @@ class GitHubPrPublisher implements PrPublisher {
       '--body',
       metadata.body,
       '--base',
-      'main',
+      metadata.baseBranch,
     ];
     if (context.repo != null && context.repo!.isNotEmpty) {
       ghArgs.addAll(<String>['--repo', context.repo!]);
@@ -237,6 +292,23 @@ class GitHubPrPublisher implements PrPublisher {
     final String stderr = prResult.stderr as String? ?? '';
 
     if (prResult.exitCode != 0) {
+      // On a re-run the branch already has an open PR. The push above already
+      // updated it, so this is a successful update rather than a failure.
+      if (stderr.contains('already exists')) {
+        final String? existingUrl = await _findExistingPrUrl(
+          branchName: metadata.branchName,
+          repo: context.repo,
+          workingDirectory: gitWorkingDir,
+        );
+        context.log('Existing Draft PR updated with new commit: ${existingUrl ?? '(url unknown)'}');
+        return PrPublishResult(
+          success: true,
+          prUrl: existingUrl,
+          stdout: stdout,
+          stderr: stderr,
+        );
+      }
+
       return PrPublishResult(
         success: false,
         stdout: stdout,
@@ -247,5 +319,33 @@ class GitHubPrPublisher implements PrPublisher {
 
     final String prUrl = stdout.trim();
     return PrPublishResult(success: true, prUrl: prUrl, stdout: stdout, stderr: stderr);
+  }
+
+  /// Looks up the URL of the open PR for [branchName], if one exists.
+  static Future<String?> _findExistingPrUrl({
+    required String branchName,
+    required String? repo,
+    required String workingDirectory,
+  }) async {
+    try {
+      final ghArgs = <String>['pr', 'view', branchName, '--json', 'url', '--jq', '.url'];
+      if (repo != null && repo.isNotEmpty) {
+        ghArgs.addAll(<String>['--repo', repo]);
+      }
+      final ProcessResult result = await Process.run(
+        'gh',
+        ghArgs,
+        workingDirectory: workingDirectory,
+      );
+      if (result.exitCode == 0) {
+        final String url = (result.stdout as String? ?? '').trim();
+        if (url.isNotEmpty) {
+          return url;
+        }
+      }
+    } catch (_) {
+      // Best-effort lookup; the push already succeeded.
+    }
+    return null;
   }
 }

@@ -8,240 +8,11 @@ import 'dart:io';
 import 'codegen.dart';
 import 'gemini_agent.dart';
 import 'guardrails.dart';
+import 'harness_context.dart';
 import 'publisher.dart';
 import 'test_runner.dart';
 
-/// The lifecycle phases of the packages SWE-bench harness.
-enum HarnessPhase {
-  /// Initial setup: reads issue info, checks clean git working tree.
-  init,
-
-  /// Phase 1 (FAIL_TO_PASS): Writes unit test on clean main and asserts failure.
-  redTest,
-
-  /// Phase 2 (PASS_TO_PASS): Implements the fix and verifies test passes.
-  implementation,
-
-  /// Phase 3 (Hygiene): Formats code, runs static analysis, and checks guardrails.
-  validation,
-
-  /// Terminal success state: ready to open Draft PR.
-  complete,
-
-  /// Terminal failure state: aborted due to test failure or guardrail violation.
-  failed,
-}
-
-/// Holds all state and artifacts across the harness execution loop.
-class HarnessContext {
-  /// Creates a [HarnessContext].
-  HarnessContext({
-    required this.issueNumber,
-    required this.isDryRun,
-    this.packageName = 'in_app_purchase_storekit',
-    this.packagePath,
-    this.testFilePath,
-    this.redTestCode,
-    this.issueTitle = '',
-    this.issueBody = '',
-    this.repo,
-    this.skipAgent = false,
-    this.publishPr = false,
-    this.maxRetries = 5,
-    String? model,
-    List<String>? fallbackModels,
-  })  : model = resolveDefaultModel(
-          cliModel: model,
-          packageDir: resolvePackageDirectory(packageName, packagePath),
-        ),
-        fallbackModels = fallbackModels ??
-            resolveFallbackModels(
-              packageDir: resolvePackageDirectory(packageName, packagePath),
-            ),
-        currentPhase = HarnessPhase.init;
-
-  /// Target GitHub issue number.
-  final int issueNumber;
-
-  /// Target package name.
-  final String packageName;
-
-  /// Gemini model identifier.
-  final String model;
-
-  /// List of fallback/fallover models to try in sequence.
-  final List<String> fallbackModels;
-
-  /// Optional explicit directory path of the target package.
-  String? packagePath;
-
-  /// Target repository (e.g. LouiseHsu/packages).
-  final String? repo;
-
-  /// Title of the GitHub issue.
-  String issueTitle;
-
-  /// Body of the GitHub issue.
-  String issueBody;
-
-  /// Whether dry run mode is enabled.
-  final bool isDryRun;
-
-  /// Whether to skip automated agent generation (e.g. when tests/fixes are manually provided).
-  final bool skipAgent;
-
-  /// Whether to publish changes as a Draft PR upon successful completion.
-  final bool publishPr;
-
-  /// Maximum number of implementation fix attempts before giving up (default: 3).
-  final int maxRetries;
-
-  /// The URL of the published Draft PR, if created.
-  String? publishedPrUrl;
-
-  /// Current execution phase.
-  HarnessPhase currentPhase;
-
-  /// Relative or absolute path to the target test file.
-  String? testFilePath;
-
-  /// Reason recorded upon harness failure.
-  String? failureReason;
-
-  /// Summary of the most recent test failure output.
-  String? lastTestFailureSummary;
-
-  /// The reproduction unit test code generated or used in Phase 1 (FAIL_TO_PASS).
-  String? redTestCode;
-
-  /// The original unmodified content of the target test file before harness execution.
-  String? initialTestFileContent;
-
-  /// List of modified files detected and verified during Phase 3 validation.
-  final List<String> validatedModifiedFiles = <String>[];
-
-  /// Log messages generated during execution.
-  final List<String> logs = <String>[];
-
-  /// Optional override for the parent directory where failure logs are stored.
-  String? customLogParentDirectory;
-
-  /// Debug artifacts (prompts, raw responses, failure traces) buffered in-memory.
-  final Map<String, String> debugArtifacts = <String, String>{};
-
-  /// Buffers a debug artifact in-memory for failure diagnosis.
-  void recordArtifact(String fileName, String content) {
-    debugArtifacts[fileName] = content;
-  }
-
-  /// Saves full execution logs, failure reason, and all buffered artifacts to disk under
-  /// a timestamped folder (`.agents/logs/run_issue_<number>_<timestamp>/`).
-  ///
-  /// Only invoked when a harness run fails. Returns the directory path created.
-  String? saveFailureLogsToDisk() {
-    try {
-      final String parentDir =
-          customLogParentDirectory ?? '${resolvePackagePath()}/.agents/logs';
-      final String timestamp =
-          DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-      final logDirPath = '$parentDir/run_issue_${issueNumber}_$timestamp';
-      final logDir = Directory(logDirPath);
-      logDir.createSync(recursive: true);
-
-      // 1. Full execution log
-      File('$logDirPath/harness.log').writeAsStringSync('${logs.join('\n')}\n');
-
-      // 2. High-level failure reason
-      File('$logDirPath/failure_reason.txt').writeAsStringSync(
-        '${failureReason ?? "Unknown failure"}\n',
-      );
-
-      // 3. All buffered debug artifacts
-      debugArtifacts.forEach((String name, String content) {
-        File('$logDirPath/$name').writeAsStringSync(content);
-      });
-
-      return logDirPath;
-    } catch (e) {
-      log('⚠️ Failed to save failure logs to disk: $e');
-      return null;
-    }
-  }
-
-  /// Resolves the directory path of the target package.
-  String resolvePackagePath() => resolvePackageDirectory(packageName, packagePath);
-
-  /// Resolves the directory path of a target package.
-  static String resolvePackageDirectory(String packageName, [String? explicitPath]) {
-    if (explicitPath != null && Directory(explicitPath).existsSync()) {
-      return explicitPath;
-    }
-    final Directory currentDir = Directory.current;
-    if (currentDir.path.endsWith(packageName)) {
-      return currentDir.path;
-    }
-
-    final direct = Directory('packages/$packageName');
-    if (direct.existsSync()) {
-      return direct.path;
-    }
-
-    final packagesDir = Directory('packages');
-    if (packagesDir.existsSync()) {
-      for (final FileSystemEntity group in packagesDir.listSync()) {
-        if (group is Directory) {
-          final candidate = Directory('${group.path}/$packageName');
-          if (candidate.existsSync()) {
-            return candidate.path;
-          }
-        }
-      }
-    }
-    return currentDir.path;
-  }
-
-  /// Transitions to the next phase, enforcing valid state machine DAG transitions.
-  bool transitionTo(HarnessPhase nextPhase, {String? reason}) {
-    if (_isValidTransition(currentPhase, nextPhase)) {
-      final suffix = reason != null ? ' ($reason)' : '';
-      log('State transition: $currentPhase -> $nextPhase$suffix');
-      currentPhase = nextPhase;
-      return true;
-    } else {
-      final errorMsg = 'Illegal state transition from $currentPhase to $nextPhase';
-      log('❌ ERROR: $errorMsg');
-      failureReason = errorMsg;
-      currentPhase = HarnessPhase.failed;
-      return false;
-    }
-  }
-
-  /// Appends a message to the internal log.
-  void log(String message) {
-    logs.add(message);
-    stdout.writeln('[$currentPhase] $message');
-  }
-
-  /// Validates allowed transitions in the deterministic state machine.
-  static bool _isValidTransition(HarnessPhase from, HarnessPhase to) {
-    if (to == HarnessPhase.failed) {
-      return true;
-    }
-    switch (from) {
-      case HarnessPhase.init:
-        return to == HarnessPhase.redTest;
-      case HarnessPhase.redTest:
-        return to == HarnessPhase.implementation;
-      case HarnessPhase.implementation:
-        return to == HarnessPhase.validation;
-      case HarnessPhase.validation:
-        return to == HarnessPhase.complete;
-      case HarnessPhase.complete:
-      case HarnessPhase.failed:
-        return false;
-    }
-  }
-}
+export 'harness_context.dart';
 
 /// The deterministic controller that steps through each harness phase.
 class PackageHarness {
@@ -253,13 +24,14 @@ class PackageHarness {
     this.codeGenerator = const DefaultCodeGenerator(),
     HarnessAgent? agent,
     PrPublisher? publisher,
-  })  : agent = agent ??
-            GeminiHarnessAgent(
-              model: context.model,
-              fallbackModels: context.fallbackModels,
-              packageDir: context.resolvePackagePath(),
-            ),
-        publisher = publisher ?? const GitHubPrPublisher();
+  }) : agent =
+           agent ??
+           GeminiHarnessAgent(
+             model: context.model,
+             fallbackModels: context.fallbackModels,
+             packageDir: context.resolvePackagePath(),
+           ),
+       publisher = publisher ?? const GitHubPrPublisher();
 
   /// The execution context.
   final HarnessContext context;
@@ -312,7 +84,21 @@ class PackageHarness {
           context.publishedPrUrl = publishResult.prUrl;
           context.log('🚀 Draft PR published: ${publishResult.prUrl}');
         } else {
-          context.log('⚠️ Failed to publish Draft PR: ${publishResult.failureReason}');
+          // The fix itself is verified, but there is no PR to show for it. Record
+          // the reason so callers (CI) can fail loudly instead of reporting success.
+          context.prPublishFailureReason =
+              publishResult.failureReason ?? 'Unknown PR publishing failure.';
+          context.log('⚠️ Failed to publish Draft PR: ${context.prPublishFailureReason}');
+          context.recordArtifact(
+            'pr_publish_failure.txt',
+            '${context.prPublishFailureReason}\n\n'
+                '--- stdout ---\n${publishResult.stdout}\n\n'
+                '--- stderr ---\n${publishResult.stderr}\n',
+          );
+          final String? savedDir = context.saveFailureLogsToDisk();
+          if (savedDir != null) {
+            context.log('📁 PR publish failure logs saved to: $savedDir');
+          }
         }
       }
     } else {
@@ -340,12 +126,33 @@ class PackageHarness {
   Future<void> handleInit() async {
     context.log('Initializing workspace for issue #${context.issueNumber}...');
 
-    // Ensure clean workspace baseline for tracked files in package
-    try {
-      final String targetDir = context.resolvePackagePath();
-      Process.runSync('git', <String>['checkout', '--', '.'], workingDirectory: targetDir);
-    } catch (_) {
-      // Best-effort workspace hygiene
+    // Ensure a clean baseline for the package's tracked source files.
+    //
+    // Only done when the agent is going to generate code into the tree. When
+    // `skipAgent` is set the caller supplied the test/fix themselves, so wiping
+    // their working tree would destroy the very input we were handed.
+    //
+    // `.agents` is excluded deliberately: the harness tooling lives there, and it
+    // became a tracked path once it was committed. Without the exclusion this
+    // discards the agent's own uncommitted source every time the harness starts.
+    if (!context.skipAgent) {
+      try {
+        final String targetDir = context.resolvePackagePath();
+        final ProcessResult reset = Process.runSync('git', <String>[
+          'checkout',
+          '--',
+          '.',
+          ':(exclude).agents',
+        ], workingDirectory: targetDir);
+        if (reset.exitCode != 0) {
+          context.log(
+            'Note: could not reset package files to a clean baseline: '
+            '${(reset.stderr as String? ?? '').trim()}',
+          );
+        }
+      } catch (_) {
+        // Best-effort workspace hygiene
+      }
     }
 
     if (context.issueTitle.isEmpty) {
@@ -470,10 +277,7 @@ class PackageHarness {
             'Test via platform methods (e.g. SK2Transaction.unfinishedTransactions()) or the standard constructor.';
         context.log('⚠️ Attempt $attempt rejected: $lastFailureReason');
         context.lastTestFailureSummary = lastFailureReason;
-        context.recordArtifact(
-          'red_test_attempt_${attempt}_hallucinated_fromMap.txt',
-          summary,
-        );
+        context.recordArtifact('red_test_attempt_${attempt}_hallucinated_fromMap.txt', summary);
         continue;
       }
 
@@ -482,10 +286,7 @@ class PackageHarness {
         result.failureSummary,
       );
       if (context.redTestCode != null) {
-        context.recordArtifact(
-          'red_test_attempt_${attempt}_code.dart',
-          context.redTestCode!,
-        );
+        context.recordArtifact('red_test_attempt_${attempt}_code.dart', context.redTestCode!);
       }
       context.lastTestFailureSummary = result.failureSummary;
       context.log(
@@ -545,9 +346,7 @@ class PackageHarness {
     }
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-      context.log(
-        'Implementation attempt $attempt of $maxAttempts...',
-      );
+      context.log('Implementation attempt $attempt of $maxAttempts...');
 
       if (!context.skipAgent) {
         // Revert files to clean baseline before each attempt
@@ -739,7 +538,9 @@ void printUsage() {
   );
   stdout.writeln('  --skip-agent            Skip automated LLM code/test generation');
   stdout.writeln('  --publish-pr            Create branch, commit, push, and open Draft PR via gh');
-  stdout.writeln('  --max-retries=<number>  Max implementation attempts before failing (default: 5)');
+  stdout.writeln(
+    '  --max-retries=<number>  Max implementation attempts before failing (default: 5)',
+  );
   stdout.writeln('  --model=<name>          Gemini model name (default: gemini-flash-latest)');
   stdout.writeln('  --help, -h              Show this help message');
 }
@@ -783,11 +584,11 @@ Future<void> main(List<String> args) async {
     }
   }
 
-  final String resolvedPackageDir = HarnessContext.resolvePackageDirectory(packageName, packagePath);
-  final String model = resolveDefaultModel(
-    cliModel: cliModel,
-    packageDir: resolvedPackageDir,
+  final String resolvedPackageDir = HarnessContext.resolvePackageDirectory(
+    packageName,
+    packagePath,
   );
+  final String model = resolveDefaultModel(cliModel: cliModel, packageDir: resolvedPackageDir);
 
   if (issueNumber == null) {
     stderr.writeln('Error: Missing required --issue argument.\n');
