@@ -12,18 +12,20 @@ import 'harness_context.dart';
 import 'native_analyzer.dart';
 import 'publisher.dart';
 import 'test_runner.dart';
+import 'workspace.dart';
 
 export 'harness_context.dart';
 
 /// The deterministic controller that steps through each harness phase.
 class PackageHarness {
-  /// Creates a [PackageHarness] with an optional [testRunner], [validator], [codeGenerator], [nativeAnalyzer], and [agent].
+  /// Creates a [PackageHarness] with an optional [testRunner], [validator], [codeGenerator], [nativeAnalyzer], [workspace], and [agent].
   PackageHarness(
     this.context, {
     this.testRunner = const FlutterTestRunner(),
     this.validator = const DefaultGuardrailValidator(),
     this.codeGenerator = const DefaultCodeGenerator(),
     this.nativeAnalyzer = const SwiftTypecheckAnalyzer(),
+    this.workspace = const GitWorkspace(),
     HarnessAgent? agent,
     PrPublisher? publisher,
   }) : agent =
@@ -49,6 +51,9 @@ class PackageHarness {
 
   /// Native (non-Dart) source analyzer instance.
   final NativeAnalyzer nativeAnalyzer;
+
+  /// Working tree inspection and restoration.
+  final Workspace workspace;
 
   /// AI agent instance.
   final HarnessAgent agent;
@@ -132,28 +137,11 @@ class PackageHarness {
     // Only done when the agent is going to generate code into the tree. When
     // `skipAgent` is set the caller supplied the test/fix themselves, so wiping
     // their working tree would destroy the very input we were handed.
-    //
-    // `.agents` is excluded deliberately: the harness tooling lives there, and it
-    // became a tracked path once it was committed. Without the exclusion this
-    // discards the agent's own uncommitted source every time the harness starts.
     if (!context.skipAgent) {
-      try {
-        final String targetDir = context.resolvePackagePath();
-        final ProcessResult reset = Process.runSync('git', <String>[
-          'checkout',
-          '--',
-          '.',
-          ':(exclude).agents',
-        ], workingDirectory: targetDir);
-        if (reset.exitCode != 0) {
-          context.log(
-            'Note: could not reset package files to a clean baseline: '
-            '${(reset.stderr as String? ?? '').trim()}',
-          );
-        }
-      } catch (_) {
-        // Best-effort workspace hygiene
-      }
+      await _revertWorkspace(
+        context.resolvePackagePath(),
+        await workspace.untrackedFiles(context.resolvePackagePath()),
+      );
     }
 
     if (context.issueTitle.isEmpty) {
@@ -199,66 +187,15 @@ class PackageHarness {
       ? 'test/in_app_purchase_storekit_2_platform_test.dart'
       : 'test/${context.packageName}_test.dart';
 
-  /// Returns the set of untracked files under [targetDir], relative to it.
-  ///
-  /// Recorded before the agent runs so that files it creates can be told apart
-  /// from untracked files that were already there, which must not be deleted.
-  Future<Set<String>> _untrackedFiles(String targetDir) async {
-    try {
-      final ProcessResult result = await Process.run('git', <String>[
-        'ls-files',
-        '--others',
-        '--exclude-standard',
-      ], workingDirectory: targetDir);
-      if (result.exitCode != 0) {
-        return <String>{};
-      }
-      return (result.stdout as String)
-          .split('\n')
-          .map((String line) => line.trim())
-          .where((String line) => line.isNotEmpty && !line.contains('.agents/'))
-          .toSet();
-    } catch (_) {
-      return <String>{};
-    }
-  }
-
-  /// Restores [targetDir] to its committed state, discarding whatever the agent
-  /// changed during an attempt.
-  ///
-  /// Asks git what is dirty rather than reverting a fixed list of files. A
-  /// hardcoded list silently fails to revert any file the agent was not
-  /// expected to touch, which lets one attempt's edits leak into the next and
-  /// lets stray edits survive a failed run.
-  ///
-  /// `.agents` is excluded because the harness's own source lives there, inside
-  /// the package it operates on.
+  /// Restores [targetDir] to its committed state, discarding whatever the
+  /// agent changed during an attempt, and logs what happened.
   Future<void> _revertWorkspace(String targetDir, Set<String> baselineUntracked) async {
-    final ProcessResult checkout = await Process.run('git', <String>[
-      'checkout',
-      '--',
-      '.',
-      ':(exclude).agents',
-    ], workingDirectory: targetDir);
-    if (checkout.exitCode != 0) {
-      context.log(
-        '⚠️ Could not revert tracked files: ${(checkout.stderr as String? ?? '').trim()}',
-      );
+    final RevertResult result = await workspace.revert(targetDir, baselineUntracked);
+    for (final String warning in result.warnings) {
+      context.log('⚠️ $warning');
     }
-
-    // Remove only files this run created. Untracked files that predate the run
-    // belong to the developer and are left alone.
-    final Set<String> nowUntracked = await _untrackedFiles(targetDir);
-    for (final String relPath in nowUntracked.difference(baselineUntracked)) {
-      final file = File('$targetDir/$relPath');
-      if (file.existsSync()) {
-        try {
-          file.deleteSync();
-          context.log('Removed file created during the attempt: $relPath');
-        } catch (e) {
-          context.log('⚠️ Could not remove $relPath: $e');
-        }
-      }
+    for (final String path in result.removedFiles) {
+      context.log('Removed file created during the attempt: $path');
     }
   }
 
@@ -455,7 +392,7 @@ class PackageHarness {
 
     // Baseline for reverting between attempts. Untracked files present now are
     // the developer's and must survive; anything the agent creates must not.
-    final Set<String> baselineUntracked = await _untrackedFiles(targetDir);
+    final Set<String> baselineUntracked = await workspace.untrackedFiles(targetDir);
 
     // The red test as verified in phase 1. Re-pinned before every test run so a
     // fix cannot pass by weakening the test that judges it.

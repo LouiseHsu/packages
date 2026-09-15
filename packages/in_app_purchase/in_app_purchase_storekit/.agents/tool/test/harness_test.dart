@@ -13,6 +13,7 @@ import '../harness.dart';
 import '../native_analyzer.dart';
 import '../publisher.dart';
 import '../test_runner.dart';
+import '../workspace.dart';
 
 void main() {
   group('HarnessContext State Machine Transitions', () {
@@ -117,6 +118,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
       );
       await harness.handleRedTest();
@@ -146,6 +148,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
         );
         await harness.handleRedTest();
@@ -171,6 +174,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
       );
       await harness.handleRedTest();
@@ -204,6 +208,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
         );
         await harness.handleRedTest();
@@ -225,7 +230,11 @@ void main() {
         issueBody: 'Expose mock property in package',
       );
 
-      final harness = PackageHarness(context, nativeAnalyzer: MockNativeAnalyzer());
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+      );
       final HarnessPhase finalPhase = await harness.run();
 
       expect(finalPhase, HarnessPhase.complete);
@@ -345,6 +354,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           validator: mockValidator,
         );
         await harness.handleValidation();
@@ -380,6 +390,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         validator: mockValidator,
       );
       await harness.handleValidation();
@@ -414,6 +425,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
       );
@@ -451,6 +463,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
         );
@@ -488,6 +501,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
       );
@@ -521,6 +535,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
         );
@@ -551,6 +566,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         agent: mockAgent,
       );
@@ -579,6 +595,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         agent: mockAgent,
       );
@@ -603,6 +620,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         agent: mockAgent,
       );
@@ -631,6 +649,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -662,6 +681,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -689,6 +709,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -891,6 +912,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         agent: mockAgent,
       );
@@ -929,6 +951,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         agent: mockAgent,
       );
@@ -960,6 +983,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -998,6 +1022,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1039,6 +1064,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1080,6 +1106,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: mockNative,
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1119,6 +1146,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: mockNative,
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1154,6 +1182,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1196,6 +1225,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
           validator: mockValidator,
@@ -1232,6 +1262,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
@@ -1315,6 +1346,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           agent: mockAgent,
         );
@@ -1431,6 +1463,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           publisher: mockPublisher,
         );
         final HarnessPhase finalPhase = await harness.run();
@@ -1455,6 +1488,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           publisher: mockPublisher,
         );
         final HarnessPhase finalPhase = await harness.run();
@@ -1500,6 +1534,7 @@ void main() {
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
+          workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
           validator: mockValidator,
@@ -1562,6 +1597,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         validator: mockValidator,
@@ -1612,6 +1648,7 @@ void main() {
       final harness = PackageHarness(
         context,
         nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
         testRunner: mockRunner,
         codeGenerator: mockGen,
         validator: mockValidator,
@@ -1636,7 +1673,11 @@ void main() {
       final context = HarnessContext(issueNumber: 42, isDryRun: true, issueTitle: 'Successful Run');
       context.customLogParentDirectory = tempDir.path;
 
-      final harness = PackageHarness(context, nativeAnalyzer: MockNativeAnalyzer());
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+      );
       final HarnessPhase finalPhase = await harness.run();
 
       expect(finalPhase, HarnessPhase.complete);
@@ -1661,7 +1702,11 @@ void main() {
       context.customLogParentDirectory = tempDir.path;
       context.recordArtifact('custom_error_trace.txt', 'Pigeon compiler error details');
 
-      final harness = PackageHarness(context, nativeAnalyzer: MockNativeAnalyzer());
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        workspace: FakeWorkspace(),
+      );
       final HarnessPhase finalPhase = await harness.run();
 
       expect(finalPhase, HarnessPhase.failed);
@@ -1765,6 +1810,30 @@ class MockGuardrailValidator implements GuardrailValidator {
       );
     }
     return resultToReturn;
+  }
+}
+
+/// A [Workspace] that records calls instead of touching git or the disk.
+///
+/// The real implementation runs `git checkout -- .`, which discards
+/// uncommitted work. Pointed at the package under test -- which is this very
+/// checkout -- it would delete the developer's changes as a side effect of
+/// running the suite. [GitWorkspace] is covered by hermetic tests over
+/// throwaway repositories in `workspace_test.dart` instead.
+class FakeWorkspace implements Workspace {
+  FakeWorkspace({this.untracked = const <String>{}});
+
+  final Set<String> untracked;
+
+  int revertCallCount = 0;
+
+  @override
+  Future<Set<String>> untrackedFiles(String targetDir) async => untracked;
+
+  @override
+  Future<RevertResult> revert(String targetDir, Set<String> baselineUntracked) async {
+    revertCallCount++;
+    return const RevertResult();
   }
 }
 
