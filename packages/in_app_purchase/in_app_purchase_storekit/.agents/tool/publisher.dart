@@ -62,8 +62,9 @@ class DraftPrMetadata {
     buffer.writeln('Automated fix verified through phased TDD loop in `${context.packageName}`.');
     buffer.writeln();
 
-    final List<String> publishableFiles =
-        context.validatedModifiedFiles.where((f) => !f.contains('.agents/')).toList();
+    final List<String> publishableFiles = context.validatedModifiedFiles
+        .where((f) => !f.contains('.agents/'))
+        .toList();
     if (publishableFiles.isNotEmpty) {
       buffer.writeln('### Modified Files');
       for (final file in publishableFiles) {
@@ -123,11 +124,10 @@ class GitHubPrPublisher implements PrPublisher {
   /// Resolves the root directory of the git repository (supports monorepos).
   static Future<String> resolveGitRoot(String startDir) async {
     try {
-      final ProcessResult result = await Process.run(
-        'git',
-        <String>['rev-parse', '--show-toplevel'],
-        workingDirectory: startDir,
-      );
+      final ProcessResult result = await Process.run('git', <String>[
+        'rev-parse',
+        '--show-toplevel',
+      ], workingDirectory: startDir);
       if (result.exitCode == 0) {
         final String root = (result.stdout as String).trim();
         if (root.isNotEmpty && Directory(root).existsSync()) {
@@ -151,6 +151,30 @@ class GitHubPrPublisher implements PrPublisher {
       return const PrPublishResult(success: true, prUrl: '(dry-run-skipped)');
     }
 
+    // Publishing checks out a generated `agent/fix-issue-<n>` branch. Record the
+    // caller's branch first so it can be restored: otherwise a local run leaves
+    // the developer's repository parked on the agent branch, and whatever they
+    // commit next silently lands there instead of on their own branch.
+    final String? originalRef = await _currentRef(gitWorkingDir);
+
+    try {
+      return await _publishOnAgentBranch(context, metadata, packageDir, gitWorkingDir);
+    } finally {
+      await _restoreRef(context, gitWorkingDir, originalRef);
+    }
+  }
+
+  /// Creates the agent branch, commits the validated files, pushes, and opens
+  /// the Draft PR.
+  ///
+  /// Leaves the repository checked out on the agent branch; [publishDraftPr]
+  /// owns restoring the caller's original branch.
+  Future<PrPublishResult> _publishOnAgentBranch(
+    HarnessContext context,
+    DraftPrMetadata metadata,
+    String packageDir,
+    String gitWorkingDir,
+  ) async {
     // 1. Create or checkout branch
     context.log('Creating branch ${metadata.branchName}...');
     final ProcessResult branchResult = await Process.run('git', <String>[
@@ -169,8 +193,9 @@ class GitHubPrPublisher implements PrPublisher {
     }
 
     // 2. Stage validated files (excluding internal .agents tooling)
-    final List<String> stageFiles =
-        context.validatedModifiedFiles.where((f) => !f.contains('.agents/')).toList();
+    final List<String> stageFiles = context.validatedModifiedFiles
+        .where((f) => !f.contains('.agents/'))
+        .toList();
     if (stageFiles.isNotEmpty) {
       context.log('Staging ${stageFiles.length} file(s)...');
       final gitAddArgs = <String>['add'];
@@ -301,12 +326,7 @@ class GitHubPrPublisher implements PrPublisher {
           workingDirectory: gitWorkingDir,
         );
         context.log('Existing Draft PR updated with new commit: ${existingUrl ?? '(url unknown)'}');
-        return PrPublishResult(
-          success: true,
-          prUrl: existingUrl,
-          stdout: stdout,
-          stderr: stderr,
-        );
+        return PrPublishResult(success: true, prUrl: existingUrl, stdout: stdout, stderr: stderr);
       }
 
       return PrPublishResult(
@@ -319,6 +339,74 @@ class GitHubPrPublisher implements PrPublisher {
 
     final String prUrl = stdout.trim();
     return PrPublishResult(success: true, prUrl: prUrl, stdout: stdout, stderr: stderr);
+  }
+
+  /// Returns the current branch name, or the commit SHA when HEAD is detached.
+  static Future<String?> _currentRef(String workingDirectory) async {
+    try {
+      final ProcessResult branch = await Process.run('git', <String>[
+        'symbolic-ref',
+        '--quiet',
+        '--short',
+        'HEAD',
+      ], workingDirectory: workingDirectory);
+      if (branch.exitCode == 0) {
+        final String name = (branch.stdout as String? ?? '').trim();
+        if (name.isNotEmpty) {
+          return name;
+        }
+      }
+
+      // Detached HEAD: fall back to the SHA so the caller still lands where
+      // they started.
+      final ProcessResult sha = await Process.run('git', <String>[
+        'rev-parse',
+        'HEAD',
+      ], workingDirectory: workingDirectory);
+      if (sha.exitCode == 0) {
+        final String value = (sha.stdout as String? ?? '').trim();
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Returns the repository to [ref] after publishing.
+  ///
+  /// Deliberately uses a plain (non-forced) checkout. If publishing failed
+  /// before committing, the generated fix is still uncommitted in the working
+  /// tree, and `checkout -f` would destroy it. When the checkout is refused the
+  /// repository is left on the agent branch and that is reported, which is
+  /// recoverable; silently discarding the work would not be.
+  static Future<void> _restoreRef(
+    HarnessContext context,
+    String workingDirectory,
+    String? ref,
+  ) async {
+    if (ref == null) {
+      return;
+    }
+    final String? current = await _currentRef(workingDirectory);
+    if (current == ref) {
+      return;
+    }
+
+    final ProcessResult result = await Process.run('git', <String>[
+      'checkout',
+      ref,
+    ], workingDirectory: workingDirectory);
+    if (result.exitCode != 0) {
+      final String stderr = (result.stderr as String? ?? '').trim();
+      context.log(
+        '⚠️ Could not return to "$ref"; the repository is still on '
+        '"${current ?? 'the agent branch'}". Uncommitted changes were preserved '
+        'rather than discarded. Switch back manually once they are handled: $stderr',
+      );
+      return;
+    }
+    context.log('Returned to "$ref".');
   }
 
   /// Looks up the URL of the open PR for [branchName], if one exists.
