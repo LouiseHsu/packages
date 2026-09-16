@@ -362,7 +362,7 @@ any work of your own are sitting in the same dirty tree.
 | [`harness_context.dart`](tool/harness_context.dart) | Run config, mutable state, and log/artifact recording |
 | [`triage.dart`](tool/triage.dart) | Two-tier issue evaluation |
 | [`gemini_agent.dart`](tool/gemini_agent.dart) | Model calls, prompts, fallback chain |
-| [`codegen.dart`](tool/codegen.dart) | Pigeon and `build_runner` invocation |
+| [`codegen.dart`](tool/codegen.dart) | Pigeon invocation, plus formatting of the code it regenerates |
 | [`native_analyzer.dart`](tool/native_analyzer.dart) | Swift type-checking of the darwin sources |
 | [`test_runner.dart`](tool/test_runner.dart) | `flutter test` invocation and result capture |
 | [`guardrails.dart`](tool/guardrails.dart) | Diff-level invariant checks |
