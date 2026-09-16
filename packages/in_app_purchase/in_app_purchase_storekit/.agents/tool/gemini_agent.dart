@@ -214,7 +214,7 @@ String normalizeModelName(String model) {
 /// 2. `GEMINI_MODEL` environment variable.
 /// 3. `.agents/config.json` (`model` key) in [packageDir] or current directory.
 /// 4. First model in `fallover_models` in `.agents/config.json`.
-/// 5. Fallback default: `gemini-3.7-flash`.
+/// 5. Fallback default: `gemini-3.6-flash`.
 String resolveDefaultModel({String? cliModel, String? packageDir}) {
   if (cliModel != null && cliModel.trim().isNotEmpty) {
     return normalizeModelName(cliModel);
@@ -243,7 +243,8 @@ String resolveDefaultModel({String? cliModel, String? packageDir}) {
           if (json['model'] is String && (json['model'] as String).trim().isNotEmpty) {
             return normalizeModelName(json['model'] as String);
           }
-          final dynamic rawList = json['fallover_models'] ??
+          final dynamic rawList =
+              json['fallover_models'] ??
               json['failover_models'] ??
               json['fallback_models'] ??
               json['fallovers'] ??
@@ -258,14 +259,14 @@ String resolveDefaultModel({String? cliModel, String? packageDir}) {
     }
   }
 
-  return 'gemini-3.7-flash';
+  return 'gemini-3.6-flash';
 }
 
 /// Resolves the list of fallback/fallover models from config.json or defaults.
 ///
 /// Looks for `fallover_models`, `failover_models`, `fallback_models`, `fallovers`,
 /// or `models` array in `.agents/config.json`.
-/// Defaults to: `['gemini-3.7-flash', 'gemini-pro-latest', 'gemini-3.6-flash']`.
+/// Defaults to: `['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-pro-latest']`.
 List<String> resolveFallbackModels({String? packageDir}) {
   final candidateDirs = <String>[
     if (packageDir != null)
@@ -283,7 +284,8 @@ List<String> resolveFallbackModels({String? packageDir}) {
         final String content = configFile.readAsStringSync();
         final dynamic json = jsonDecode(content);
         if (json is Map) {
-          final dynamic rawList = json['fallover_models'] ??
+          final dynamic rawList =
+              json['fallover_models'] ??
               json['failover_models'] ??
               json['fallback_models'] ??
               json['fallovers'] ??
@@ -305,11 +307,14 @@ List<String> resolveFallbackModels({String? packageDir}) {
     }
   }
 
-  return const <String>[
-    'gemini-3.7-flash',
-    'gemini-pro-latest',
-    'gemini-3.6-flash',
-  ];
+  // Ordered by observed availability, not capability. A CI run on 2026-09-16
+  // burned roughly six minutes before producing anything: gemini-3.7-flash
+  // returned 503 on all five attempts, gemini-pro-latest then returned 429 on
+  // all five, and gemini-3.6-flash succeeded on the first try. The work here is
+  // mechanical, so a model that answers beats a stronger one that is throttled.
+  // `pro` stays in the list as a last resort but is no longer in the hot path,
+  // since it is the most rate-limited of the three.
+  return const <String>['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-pro-latest'];
 }
 
 /// Builds the prompt passed to Gemini for generating an implementation fix.
@@ -347,8 +352,8 @@ class GeminiHarnessAgent implements HarnessAgent {
     String? packageDir,
     this.retryDelay = const Duration(seconds: 5),
     this.maxNetworkRetries = 5,
-  })  : model = resolveDefaultModel(cliModel: model, packageDir: packageDir),
-        fallbackModels = fallbackModels ?? resolveFallbackModels(packageDir: packageDir);
+  }) : model = resolveDefaultModel(cliModel: model, packageDir: packageDir),
+       fallbackModels = fallbackModels ?? resolveFallbackModels(packageDir: packageDir);
 
   /// Optional explicit Gemini API key.
   final String? apiKey;
@@ -413,8 +418,7 @@ class GeminiHarnessAgent implements HarnessAgent {
             },
             'replace_block': <String, dynamic>{
               'type': 'STRING',
-              'description':
-                  'Replacement code snippet to substitute in place of search_block.',
+              'description': 'Replacement code snippet to substitute in place of search_block.',
             },
           },
           'required': <String>['file_path', 'search_block', 'replace_block'],
@@ -551,8 +555,9 @@ class GeminiHarnessAgent implements HarnessAgent {
           if (response.statusCode == 503 || response.statusCode == 429) {
             if (networkAttempt < maxNetworkRetries) {
               final String? retryAfterHeader = response.headers.value('retry-after');
-              final int? parsedRetryAfter =
-                  retryAfterHeader != null ? int.tryParse(retryAfterHeader.trim()) : null;
+              final int? parsedRetryAfter = retryAfterHeader != null
+                  ? int.tryParse(retryAfterHeader.trim())
+                  : null;
               final int exponentialSeconds = retryDelay == Duration.zero
                   ? 0
                   : math.min(60, (retryDelay.inSeconds * math.pow(2, networkAttempt - 1)).toInt());
@@ -743,10 +748,7 @@ STRICT INVARIANTS:
 6. Return RAW code only in `replace_block`. Do NOT wrap in markdown code fences (no ```dart or ```).
 ''';
 
-    final String prompt = buildFixPrompt(
-      context,
-      fileContext: fileContextBuffer.toString(),
-    );
+    final String prompt = buildFixPrompt(context, fileContext: fileContextBuffer.toString());
 
     final Map<String, dynamic> response = await _callGemini(
       prompt: prompt,

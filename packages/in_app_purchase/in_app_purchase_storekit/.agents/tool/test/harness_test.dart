@@ -797,7 +797,7 @@ void main() {
 
     test('resolveFallbackModels returns defaults when config file is missing', () {
       final List<String> defaults = resolveFallbackModels(packageDir: '/non_existent_path');
-      expect(defaults, <String>['gemini-3.7-flash', 'gemini-pro-latest', 'gemini-3.6-flash']);
+      expect(defaults, <String>['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-pro-latest']);
     });
 
     test(
