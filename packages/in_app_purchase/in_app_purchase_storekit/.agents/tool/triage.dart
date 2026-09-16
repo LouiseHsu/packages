@@ -80,9 +80,11 @@ Future<TriageVerdict> evaluateWithGemini({
   int maxNetworkRetries = 3,
   Duration retryDelay = const Duration(seconds: 5),
   void Function(String message)? logger,
-  // Test-only seam. Not annotated `@visibleForTesting` because this file is run
-  // directly by CI (`dart triage.dart`) with no `pub get`, so it must import
-  // dart: libraries only.
+  // Test-only seam. Not annotated `@visibleForTesting` because this file is
+  // reachable from `run.dart`, which CI invokes as a bare `dart run.dart` with
+  // no `pub get`. Every library in that import graph must therefore stick to
+  // `dart:` imports -- even `package:meta`, which is a direct dependency,
+  // resolves at analysis time but fails at run time in CI.
   Uri? endpointOverride,
 }) async {
   final Uri requestUri;
@@ -270,111 +272,5 @@ void writeGithubOutput(String key, String value) {
   final String? outputPath = Platform.environment['GITHUB_OUTPUT'];
   if (outputPath != null && outputPath.isNotEmpty) {
     File(outputPath).writeAsStringSync('$key=$value\n', mode: FileMode.append);
-  }
-}
-
-Future<void> main(List<String> args) async {
-  final Map<String, String> env = Platform.environment;
-
-  // Retrieve issue information from env or args
-  String title = env['ISSUE_TITLE'] ?? '';
-  String body = env['ISSUE_BODY'] ?? '';
-  int issueNumber = int.tryParse(env['ISSUE_NUMBER'] ?? '') ?? 0;
-
-  // Optional JSON file payload support
-  final String? eventPath = env['GITHUB_EVENT_PATH'];
-  if (eventPath != null && File(eventPath).existsSync()) {
-    try {
-      final eventJson = jsonDecode(File(eventPath).readAsStringSync()) as Map<String, dynamic>;
-      final issue = eventJson['issue'] as Map<String, dynamic>?;
-      if (issue != null) {
-        title = issue['title'] as String? ?? title;
-        body = issue['body'] as String? ?? body;
-        issueNumber = (issue['number'] as num?)?.toInt() ?? issueNumber;
-      }
-    } catch (e) {
-      stderr.writeln('Warning: Failed to parse GITHUB_EVENT_PATH: $e');
-    }
-  }
-
-  if (title.isEmpty && issueNumber > 0) {
-    try {
-      final ProcessResult result = Process.runSync('gh', <String>[
-        'issue',
-        'view',
-        issueNumber.toString(),
-        '--json',
-        'title,body',
-      ]);
-      if (result.exitCode == 0) {
-        final issueData = jsonDecode(result.stdout as String) as Map<String, dynamic>;
-        title = issueData['title'] as String? ?? title;
-        body = issueData['body'] as String? ?? body;
-      }
-    } catch (e) {
-      stderr.writeln('Warning: Could not fetch issue via gh CLI: $e');
-    }
-  }
-
-  if (title.isEmpty) {
-    stderr.writeln('Error: Issue title is empty. Set ISSUE_TITLE or GITHUB_EVENT_PATH.');
-    exitCode = 1;
-    return;
-  }
-
-  stdout.writeln('=================== STOREKIT ISSUE TRIAGE ===================');
-  stdout.writeln('Issue #$issueNumber: $title');
-
-  // Step 1: Zero-cost regex gate
-  if (!passesStaticGate(title, body)) {
-    writeGithubOutput('accepted', 'false');
-    writeGithubOutput('reason', 'heuristic_gate_filtered');
-    stdout.writeln('Verdict: REJECTED (Failed Tier 1 regex heuristic)');
-    return;
-  }
-
-  // Step 2: Gemini 2.5 Flash Structured Evaluation
-  stdout.writeln('Querying Gemini 2.5 Flash structured evaluation...');
-  try {
-    final TriageVerdict verdict = await evaluateWithGemini(
-      title: title,
-      body: body,
-      issueNumber: issueNumber,
-      apiKey: env['GEMINI_API_KEY'],
-      gcpAccessToken: env['GCP_ACCESS_TOKEN'],
-      gcpProjectId: env['GCP_PROJECT_ID'] ?? 'flutter-dev',
-      gcpLocation: env['GCP_LOCATION'] ?? 'us-central1',
-      model: env['GEMINI_MODEL'] ?? 'gemini-2.5-flash-lite',
-    );
-
-    stdout.writeln('Evaluation Results:');
-    stdout.writeln(' - Category: ${verdict.category}');
-    stdout.writeln(' - Is Mechanical: ${verdict.isMechanical}');
-    stdout.writeln(' - Suitability Score: ${verdict.suitabilityScore}/10');
-    stdout.writeln(' - Target Files: ${verdict.targetFilesHint}');
-    stdout.writeln(' - Reasoning: ${verdict.reasoning}');
-
-    final bool accepted = verdict.isMechanical && verdict.suitabilityScore >= 7;
-
-    writeGithubOutput('accepted', accepted ? 'true' : 'false');
-    writeGithubOutput('score', verdict.suitabilityScore.toString());
-    writeGithubOutput('category', verdict.category);
-    writeGithubOutput('is_mechanical', verdict.isMechanical ? 'true' : 'false');
-    writeGithubOutput('reasoning', verdict.reasoning.replaceAll('\n', ' '));
-
-    if (accepted) {
-      stdout.writeln('🚀 Verdict: ACCEPTED for automated resolution!');
-    } else {
-      stdout.writeln('❌ Verdict: REJECTED (Does not meet mechanical criteria)');
-    }
-  } catch (e, stack) {
-    stderr.writeln('Error during triage evaluation: $e');
-    stderr.writeln(stack);
-    writeGithubOutput('accepted', 'false');
-    writeGithubOutput('reason', 'evaluation_error');
-    // Distinguishes "never assessed" from "assessed and rejected". A workflow
-    // gating on `accepted == 'false'` cannot tell those apart on its own.
-    writeGithubOutput('error', 'true');
-    exitCode = 1;
   }
 }

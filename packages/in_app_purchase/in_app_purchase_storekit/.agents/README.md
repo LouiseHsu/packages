@@ -357,10 +357,10 @@ any work of your own are sitting in the same dirty tree.
 
 | File | Role |
 |---|---|
-| [`run.dart`](tool/run.dart) | CLI entrypoint; wires triage → harness → exit code |
+| [`run.dart`](tool/run.dart) | The only entrypoint; wires triage → harness → exit code. Both workflows invoke this |
 | [`harness.dart`](tool/harness.dart) | The phase state machine and its gates |
 | [`harness_context.dart`](tool/harness_context.dart) | Run config, mutable state, and log/artifact recording |
-| [`triage.dart`](tool/triage.dart) | Two-tier issue evaluation |
+| [`triage.dart`](tool/triage.dart) | Two-tier issue evaluation. Library only — no `main()`, by design |
 | [`gemini_agent.dart`](tool/gemini_agent.dart) | Model calls, prompts, fallback chain |
 | [`codegen.dart`](tool/codegen.dart) | Pigeon invocation, plus formatting of the code it regenerates |
 | [`native_analyzer.dart`](tool/native_analyzer.dart) | Swift type-checking of the darwin sources |

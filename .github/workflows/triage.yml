@@ -60,8 +60,19 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+        # `run.dart --triage-only` rather than `triage.dart` directly. Both used
+        # to have their own `main()`, and only `run.dart` had the model failover
+        # loop, so a throttled model aborted triage here while the same issue
+        # would have been triaged fine locally. Running the shared entrypoint
+        # means this job and the resolve job agree on model selection, retry
+        # behaviour, and the accepted/error distinction below.
+        #
+        # No `dart pub get`: nothing in the import graph uses `package:` imports,
+        # which is exactly how agent_resolve.yml already invokes this script.
         run: |
-          dart packages/in_app_purchase/in_app_purchase_storekit/.agents/tool/triage.dart
+          dart packages/in_app_purchase/in_app_purchase_storekit/.agents/tool/run.dart \
+            --triage-only \
+            --issue="$ISSUE_NUMBER"
 
       - name: Apply Acceptance Label & Comment
         if: steps.run_triage.outputs.accepted == 'true'

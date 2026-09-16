@@ -404,10 +404,17 @@ Future<int> runPipeline(
       options.packageName,
       options.packagePath,
     );
-    final String resolvedModel = resolveDefaultModel(
-      cliModel: options.model,
-      packageDir: resolvedPackageDir,
-    );
+    // `options.model` is passed through unresolved, rather than run through
+    // `resolveDefaultModel` as the harness does. Triage is one structured
+    // classification call; the harness writes code. Resolving here would force
+    // the harness's model onto triage and make the cheap default inside
+    // `defaultTriageEvaluator` unreachable -- triage runs on every incoming
+    // issue, the harness only on accepted ones, so the cost asymmetry matters.
+    //
+    // An explicit `--model` still wins, because it arrives as a non-null
+    // `options.model`. The fallback list is shared either way, so a cheap
+    // primary model that is throttled or down still fails over instead of
+    // aborting the run.
     final List<String> fallbackModels = resolveFallbackModels(
       packageDir: resolvedPackageDir,
     );
@@ -420,7 +427,7 @@ Future<int> runPipeline(
       gcpAccessToken: env['GCP_ACCESS_TOKEN'],
       gcpProjectId: env['GCP_PROJECT_ID'],
       gcpLocation: env['GCP_LOCATION'],
-      model: resolvedModel,
+      model: options.model,
       fallbackModels: fallbackModels,
       minScore: options.minTriageScore,
       logger: log,

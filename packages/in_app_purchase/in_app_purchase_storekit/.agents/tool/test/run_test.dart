@@ -188,6 +188,83 @@ void main() {
       expect(logs.any((String line) => line.contains('declined by triage')), isFalse);
     });
 
+    test('leaves the triage model unset so the cheap default applies', () async {
+      // Triage used to be reachable two different ways: `triage.yml` ran
+      // `triage.dart` directly on a hardcoded cheap model, while `run.dart`
+      // resolved the harness's code-generation model and forced that onto
+      // triage instead. Collapsing onto one entrypoint makes this the only
+      // path, so the model it selects has to stay deliberate.
+      String? capturedModel = 'sentinel';
+      List<String>? capturedFallbacks;
+
+      await runPipeline(
+        <String>['--issue=52', '--title=Expose originalPurchaseDate on SK2Transaction'],
+        triageEvaluator: ({
+          required String title,
+          required String body,
+          required int issueNumber,
+          String? apiKey,
+          String? gcpAccessToken,
+          String? gcpProjectId,
+          String? gcpLocation,
+          String? model,
+          List<String>? fallbackModels,
+          int minScore = 7,
+          void Function(String message)? logger,
+        }) async {
+          capturedModel = model;
+          capturedFallbacks = fallbackModels;
+          return const TriageExecutionResult(
+            accepted: false,
+            reason: 'not_mechanical',
+          );
+        },
+        harnessRunner: (HarnessContext context) async => HarnessPhase.complete,
+        logger: (String _) {},
+      );
+
+      // Null, not the harness model: the evaluator supplies its own cheap
+      // default for what is a single classification call.
+      expect(capturedModel, isNull);
+      // Failover is still wired up, which running `triage.dart` never had.
+      expect(capturedFallbacks, isNotEmpty);
+    });
+
+    test('honours an explicit --model for triage', () async {
+      String? capturedModel;
+
+      await runPipeline(
+        <String>[
+          '--issue=53',
+          '--title=Expose originalPurchaseDate on SK2Transaction',
+          '--model=gemini-3.6-flash',
+        ],
+        triageEvaluator: ({
+          required String title,
+          required String body,
+          required int issueNumber,
+          String? apiKey,
+          String? gcpAccessToken,
+          String? gcpProjectId,
+          String? gcpLocation,
+          String? model,
+          List<String>? fallbackModels,
+          int minScore = 7,
+          void Function(String message)? logger,
+        }) async {
+          capturedModel = model;
+          return const TriageExecutionResult(
+            accepted: false,
+            reason: 'not_mechanical',
+          );
+        },
+        harnessRunner: (HarnessContext context) async => HarnessPhase.complete,
+        logger: (String _) {},
+      );
+
+      expect(capturedModel, 'gemini-3.6-flash');
+    });
+
     test('stops after triage when --triage-only is specified and issue is accepted', () async {
       final logs = <String>[];
       var harnessCalled = false;
