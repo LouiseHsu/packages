@@ -25,7 +25,18 @@ permissions: read-all
 jobs:
   resolve:
     name: Resolve Issue with SWE-bench Harness
-    runs-on: ubuntu-latest
+    # macOS, not ubuntu, because two of the harness's gates are Apple-only:
+    #
+    #  * The Swift type-check that catches hallucinated StoreKit APIs. On Linux
+    #    it reports "Swift type-checking requires macOS" and skips, which means
+    #    the defence silently does not run on any PR this workflow produces.
+    #  * `swift-format`, which the repository's own format check invokes through
+    #    `xcrun`, so regenerated `.g.swift` would otherwise stay unformatted.
+    #
+    # GitHub-hosted macOS runners are free for public repositories, so this
+    # costs nothing here. Revisit if this workflow is ever used from a private
+    # repository, where macOS minutes bill at 10x.
+    runs-on: macos-latest
 
     # `issues: [labeled]` fires for every label, so gate on the specific one.
     if: >-
@@ -34,7 +45,9 @@ jobs:
 
     # The harness runs a full test suite per implementation attempt. Cap it well
     # below the 6h GitHub default so a stuck retry loop cannot burn the budget.
-    timeout-minutes: 45
+    # macOS runners are slower to provision and precache than Linux, hence the
+    # larger allowance than the Linux job needed.
+    timeout-minutes: 60
 
     permissions:
       id-token: write      # Google Cloud WIF authentication
@@ -83,6 +96,14 @@ jobs:
         run: |
           cd packages/in_app_purchase/in_app_purchase_storekit
           flutter pub get
+
+      # The Swift type-check compiles against FlutterMacOS.xcframework, which
+      # lives in the engine artifacts rather than the SDK itself. `pub get` and
+      # `flutter test` never fetch it, so without this the analyzer cannot
+      # resolve `import FlutterMacOS` and skips -- the exact failure mode this
+      # job moved to macOS to avoid.
+      - name: Precache macOS engine artifacts
+        run: flutter precache --macos
 
       # Triage already ran in triage.yml (that is what applied `ai-accepted`).
       # --skip-triage avoids a second, non-deterministic Gemini verdict that could
