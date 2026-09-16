@@ -140,12 +140,27 @@ meaningful relative to a test that was *observed* failing beforehand.
 
 ### `implementation` — make it pass
 The agent edits source, then runs code generation (Pigeon, and `build_runner`
-where relevant). Four gates, all required:
+where relevant). Five gates, all required, in this order:
 
-1. The new test passes.
-2. The **full package suite** passes — no regressions.
-3. `dart analyze` is clean.
-4. Formatting is clean.
+1. The **Swift sources type-check**.
+2. The new test passes.
+3. The **full package suite** passes — no regressions.
+4. `dart analyze` is clean.
+5. Formatting is clean.
+
+The Swift gate runs first because it is the cheapest and catches the failure the
+Dart tests structurally cannot. The Dart tests mock the platform channel, so a
+Swift translator that references a StoreKit property that does not exist will
+still let every Dart test pass. The harness therefore type-checks the native
+sources directly (`swiftc -typecheck` against the macOS SDK and the Flutter
+framework — no Xcode project, no CocoaPods, roughly a second) so an invented
+Apple API is rejected in the loop rather than discovered by a reviewer.
+
+> [!NOTE]
+> If the Swift toolchain or the Flutter engine artifacts aren't available, the
+> check is **skipped, not failed** — so the pipeline still works on a machine
+> without Xcode. When that happens the PR body says so explicitly rather than
+> staying silent about it.
 
 If any gate fails, the harness **reverts the workspace to its pre-attempt state**
 and retries, feeding the failure back to the model so the next attempt is
@@ -186,6 +201,9 @@ On success you get a **Draft PR** on branch `agent/fix-issue-<n>`, titled
   formatting clean, plus a pointer back to this document.
 - A collapsed **"Verified failure before the fix"** section containing the
   *actual output* of the reproduction test when it ran against unmodified code.
+- If the native type-check could not run, a **`Native sources were not
+  type-checked`** warning naming the reason. Its absence means the Swift
+  sources did compile.
 
 On failure you get a comment on the issue with a link to the run, and the label
 stays on. Nothing is pushed.
@@ -219,8 +237,10 @@ What it does **not** tell you:
 
 Other limits worth holding in mind:
 
-- **Dart-level verification only.** Swift translator changes are exercised
-  through Dart tests and static analysis; native `XCTest` suites are not run.
+- **Native code is type-checked, not run.** The Swift sources compile, so the
+  APIs they reference exist — but no native `XCTest` suite runs, so nothing
+  verifies they *behave* correctly. The check also targets macOS, which means
+  `#if os(iOS)` branches and iOS-only availability are still unchecked.
 - **Passing tests are not correct behaviour.** The agent wrote both the test and
   the fix. A test can be green and still encode the wrong expectation — review
   the assertion, not just the diff.
@@ -343,7 +363,10 @@ any work of your own are sitting in the same dirty tree.
 | [`triage.dart`](tool/triage.dart) | Two-tier issue evaluation |
 | [`gemini_agent.dart`](tool/gemini_agent.dart) | Model calls, prompts, fallback chain |
 | [`codegen.dart`](tool/codegen.dart) | Pigeon and `build_runner` invocation |
+| [`native_analyzer.dart`](tool/native_analyzer.dart) | Swift type-checking of the darwin sources |
+| [`test_runner.dart`](tool/test_runner.dart) | `flutter test` invocation and result capture |
 | [`guardrails.dart`](tool/guardrails.dart) | Diff-level invariant checks |
+| [`workspace.dart`](tool/workspace.dart) | Reverting the tree between attempts, excluding `.agents/` |
 | [`publisher.dart`](tool/publisher.dart) | Branch, commit, push, and Draft PR creation |
 | [`playbook.md`](playbook.md) | The domain procedure the agent follows for StoreKit work |
 
