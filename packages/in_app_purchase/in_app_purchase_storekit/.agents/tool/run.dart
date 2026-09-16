@@ -78,11 +78,19 @@ class TriageExecutionResult {
     required this.accepted,
     required this.reason,
     this.verdict,
+    this.isError = false,
   });
 
   final bool accepted;
   final String reason;
   final TriageVerdict? verdict;
+
+  /// True when triage never produced a verdict at all.
+  ///
+  /// This is distinct from `accepted == false`, which means triage *did* run
+  /// and judged the issue unsuitable. An error means the infrastructure failed
+  /// -- the issue has not actually been assessed and deserves another attempt.
+  final bool isError;
 }
 
 /// Interface for fetching issue metadata (title & body) from GitHub.
@@ -153,13 +161,15 @@ Future<TriageExecutionResult> defaultTriageEvaluator({
         gcpProjectId: gcpProjectId ?? 'flutter-dev',
         gcpLocation: gcpLocation ?? 'us-central1',
         model: activeModel,
+        logger: log,
       );
       break;
     } catch (e) {
       lastError = e;
       final errString = e.toString();
       if (errString.contains('503') || errString.contains('429') || errString.contains('404')) {
-        log('Notice: Model "$activeModel" unavailable ($errString). Falling back to next model...');
+        // Reached only after this model's own retries are exhausted.
+        log('Notice: Model "$activeModel" still unavailable. Falling back to next model...');
         continue;
       }
       break;
@@ -170,9 +180,12 @@ Future<TriageExecutionResult> defaultTriageEvaluator({
     stderr.writeln('Error during triage evaluation: $lastError');
     writeGithubOutput('accepted', 'false');
     writeGithubOutput('reason', 'evaluation_error');
+    // Lets a workflow distinguish "not suitable" from "never assessed".
+    writeGithubOutput('error', 'true');
     return TriageExecutionResult(
       accepted: false,
       reason: 'evaluation_error: $lastError',
+      isError: true,
     );
   }
 
@@ -412,6 +425,18 @@ Future<int> runPipeline(
       minScore: options.minTriageScore,
       logger: log,
     );
+
+    if (triageResult.isError) {
+      // Not a verdict -- triage never ran to completion. Exit non-zero so the
+      // run shows up as failed rather than quietly green, and say plainly that
+      // the issue still needs assessing. The label is deliberately left in
+      // place so the issue can be picked up again once the API recovers.
+      log('⚠️ Triage could not evaluate issue #$effectiveIssueNumber (${triageResult.reason}).');
+      log('This is an infrastructure failure, not a rejection -- the issue has');
+      log('not been assessed. Leaving the label in place so it can be retried.');
+      log('Halting pipeline without modifying files.');
+      return 1;
+    }
 
     if (!triageResult.accepted) {
       log('🛑 Issue #$effectiveIssueNumber declined by triage (${triageResult.reason}).');

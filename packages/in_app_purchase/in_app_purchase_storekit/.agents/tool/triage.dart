@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 /// Represents the structured output from the triage evaluation.
 class TriageVerdict {
@@ -76,6 +77,13 @@ Future<TriageVerdict> evaluateWithGemini({
   String gcpProjectId = 'flutter-dev',
   String gcpLocation = 'us-central1',
   String model = 'gemini-2.5-flash-lite',
+  int maxNetworkRetries = 3,
+  Duration retryDelay = const Duration(seconds: 5),
+  void Function(String message)? logger,
+  // Test-only seam. Not annotated `@visibleForTesting` because this file is run
+  // directly by CI (`dart triage.dart`) with no `pub get`, so it must import
+  // dart: libraries only.
+  Uri? endpointOverride,
 }) async {
   final Uri requestUri;
   final headers = <String, String>{'Content-Type': 'application/json'};
@@ -87,13 +95,32 @@ Future<TriageVerdict> evaluateWithGemini({
     );
     headers['Authorization'] = 'Bearer $gcpAccessToken';
   } else if (apiKey != null && apiKey.isNotEmpty) {
-    // Gemini Developer API endpoint (Local / API key testing)
+    // Gemini Developer API endpoint (Local / API key testing).
+    //
+    // The key is sent as a header rather than a `?key=` query parameter on
+    // purpose. A Uri carrying the key leaks it into `HttpException.toString()`,
+    // which Dart renders as `..., uri = <full url>` -- and that string ends up
+    // in saved run logs and in CI output, which is world-readable on a public
+    // repository.
     requestUri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
     );
+    headers['x-goog-api-key'] = apiKey;
   } else {
     throw StateError('No credentials found. Provide either GCP_ACCESS_TOKEN or GEMINI_API_KEY.');
   }
+
+  // Redirects the origin only, deliberately preserving the path and query
+  // string. A wholesale Uri replacement would discard the query, which would
+  // hide a credential accidentally reintroduced into the URL -- exactly the
+  // regression the tests here exist to catch.
+  final Uri effectiveUri = endpointOverride == null
+      ? requestUri
+      : requestUri.replace(
+          scheme: endpointOverride.scheme,
+          host: endpointOverride.host,
+          port: endpointOverride.port,
+        );
 
   const systemInstruction = '''
 You are an expert triage engineer for Flutter's in_app_purchase_storekit package.
@@ -175,36 +202,65 @@ Calibrated scoring reference (0-10):
 
   final httpClient = HttpClient();
   try {
-    final HttpClientRequest request = await httpClient.postUrl(requestUri);
-    headers.forEach((String key, String value) {
-      request.headers.set(key, value);
-    });
-    request.write(jsonEncode(requestBody));
+    for (var attempt = 1; ; attempt++) {
+      final HttpClientRequest request = await httpClient.postUrl(effectiveUri);
+      headers.forEach((String key, String value) {
+        request.headers.set(key, value);
+      });
+      request.write(jsonEncode(requestBody));
 
-    final HttpClientResponse response = await request.close();
-    final String responseText = await response.transform(utf8.decoder).join();
+      final HttpClientResponse response = await request.close();
+      final String responseText = await response.transform(utf8.decoder).join();
 
-    if (response.statusCode != 200) {
-      throw HttpException(
-        'Gemini API request failed (${response.statusCode}): $responseText',
-        uri: requestUri,
-      );
+      // 503/429 are capacity signals, not verdicts about this model. Waiting is
+      // the correct response; failing straight over to another model is not,
+      // because a demand spike usually affects every model at once. Only give
+      // up on this model once the retries are exhausted.
+      final bool isTransient = response.statusCode == 503 || response.statusCode == 429;
+      if (isTransient && attempt < maxNetworkRetries) {
+        final String? retryAfterHeader = response.headers.value('retry-after');
+        final int? parsedRetryAfter = retryAfterHeader != null
+            ? int.tryParse(retryAfterHeader.trim())
+            : null;
+        final int exponentialSeconds = retryDelay == Duration.zero
+            ? 0
+            : math.min(60, (retryDelay.inSeconds * math.pow(2, attempt - 1)).toInt());
+        final delay = Duration(seconds: parsedRetryAfter ?? exponentialSeconds);
+
+        logger?.call(
+          'Notice: Model "$model" busy (${response.statusCode}). '
+          'Waiting ${delay.inSeconds}s before retry '
+          '(attempt $attempt of $maxNetworkRetries)...',
+        );
+        if (delay > Duration.zero) {
+          await Future<void>.delayed(delay);
+        }
+        continue;
+      }
+
+      if (response.statusCode != 200) {
+        // Deliberately no `uri:` argument -- see the credential comment above.
+        throw HttpException(
+          'Gemini API request failed for model "$model" '
+          '(${response.statusCode}): $responseText',
+        );
+      }
+
+      final jsonResponse = jsonDecode(responseText) as Map<String, dynamic>;
+      final candidates = jsonResponse['candidates'] as List<dynamic>?;
+      if (candidates == null || candidates.isEmpty) {
+        throw StateError('No candidates returned from Gemini API.');
+      }
+
+      final candidate = candidates.first as Map<String, dynamic>;
+      final content = candidate['content'] as Map<String, dynamic>;
+      final parts = content['parts'] as List<dynamic>;
+      final firstPart = parts.first as Map<String, dynamic>;
+      final rawJsonText = firstPart['text'] as String;
+
+      final verdictMap = jsonDecode(rawJsonText) as Map<String, dynamic>;
+      return TriageVerdict.fromJson(verdictMap);
     }
-
-    final jsonResponse = jsonDecode(responseText) as Map<String, dynamic>;
-    final candidates = jsonResponse['candidates'] as List<dynamic>?;
-    if (candidates == null || candidates.isEmpty) {
-      throw StateError('No candidates returned from Gemini API.');
-    }
-
-    final candidate = candidates.first as Map<String, dynamic>;
-    final content = candidate['content'] as Map<String, dynamic>;
-    final parts = content['parts'] as List<dynamic>;
-    final firstPart = parts.first as Map<String, dynamic>;
-    final rawJsonText = firstPart['text'] as String;
-
-    final verdictMap = jsonDecode(rawJsonText) as Map<String, dynamic>;
-    return TriageVerdict.fromJson(verdictMap);
   } finally {
     httpClient.close();
   }
@@ -316,6 +372,9 @@ Future<void> main(List<String> args) async {
     stderr.writeln(stack);
     writeGithubOutput('accepted', 'false');
     writeGithubOutput('reason', 'evaluation_error');
+    // Distinguishes "never assessed" from "assessed and rejected". A workflow
+    // gating on `accepted == 'false'` cannot tell those apart on its own.
+    writeGithubOutput('error', 'true');
     exitCode = 1;
   }
 }

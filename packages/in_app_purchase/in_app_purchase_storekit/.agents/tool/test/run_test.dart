@@ -144,6 +144,50 @@ void main() {
       expect(logs.any((String line) => line.contains('declined by triage (heuristic_gate_filtered)')), isTrue);
     });
 
+    test('exits non-zero when triage errors rather than declining', () async {
+      final logs = <String>[];
+      var harnessCalled = false;
+
+      final int exitCode = await runPipeline(
+        <String>['--issue=51', '--title=Expose originalPurchaseDate on SK2Transaction'],
+        triageEvaluator: ({
+          required String title,
+          required String body,
+          required int issueNumber,
+          String? apiKey,
+          String? gcpAccessToken,
+          String? gcpProjectId,
+          String? gcpLocation,
+          String? model,
+          List<String>? fallbackModels,
+          int minScore = 7,
+          void Function(String message)? logger,
+        }) async {
+          return const TriageExecutionResult(
+            accepted: false,
+            reason: 'evaluation_error: 503 UNAVAILABLE',
+            isError: true,
+          );
+        },
+        harnessRunner: (HarnessContext context) async {
+          harnessCalled = true;
+          return HarnessPhase.complete;
+        },
+        logger: logs.add,
+      );
+
+      // A transient outage must not look like a successful run, or CI reports
+      // green while the issue silently goes unassessed.
+      expect(exitCode, 1);
+      expect(harnessCalled, isFalse);
+      expect(
+        logs.any((String line) => line.contains('could not evaluate issue #51')),
+        isTrue,
+      );
+      // It must not be described as a rejection.
+      expect(logs.any((String line) => line.contains('declined by triage')), isFalse);
+    });
+
     test('stops after triage when --triage-only is specified and issue is accepted', () async {
       final logs = <String>[];
       var harnessCalled = false;

@@ -522,9 +522,13 @@ class GeminiHarnessAgent implements HarnessAgent {
           );
           headers['Authorization'] = 'Bearer $effectiveToken';
         } else if (effectiveApiKey != null && effectiveApiKey.isNotEmpty) {
+          // Sent as a header, not a `?key=` query parameter: a Uri holding the
+          // key leaks it through `HttpException.toString()` into run logs and
+          // CI output. See the matching comment in triage.dart.
           requestUri = Uri.parse(
-            'https://generativelanguage.googleapis.com/v1beta/models/$activeModel:generateContent?key=$effectiveApiKey',
+            'https://generativelanguage.googleapis.com/v1beta/models/$activeModel:generateContent',
           );
+          headers['x-goog-api-key'] = effectiveApiKey;
         } else {
           throw StateError(
             'No credentials found for HarnessAgent. Set GEMINI_API_KEY or GCP_ACCESS_TOKEN.',
