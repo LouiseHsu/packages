@@ -21,6 +21,7 @@ class SK2Transaction {
     required this.originalId,
     required this.productId,
     required this.purchaseDate,
+    this.originalPurchaseDate,
     this.expirationDate,
     this.quantity = 1,
     required this.appAccountToken,
@@ -47,6 +48,9 @@ class SK2Transaction {
   ///
   /// Milliseconds since epoch.
   final String purchaseDate;
+
+  /// The purchase date of the original transaction, in milliseconds since epoch.
+  final String? originalPurchaseDate;
 
   /// The date the subscription expires or renews.
   ///
@@ -129,6 +133,7 @@ extension on SK2TransactionMessage {
       originalId: originalId.toString(),
       productId: productId,
       purchaseDate: _secondsToMillisecondsSinceEpochString(purchaseDate) ?? '',
+      originalPurchaseDate: _secondsToMillisecondsSinceEpochString(originalPurchaseDate),
       expirationDate: _secondsToMillisecondsSinceEpochString(expirationDate),
       quantity: purchasedQuantity,
       appAccountToken: appAccountToken,
