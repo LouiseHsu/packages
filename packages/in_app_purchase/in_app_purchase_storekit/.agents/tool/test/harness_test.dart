@@ -532,12 +532,19 @@ void main() {
           const TestRunResult(exitCode: 0, stdout: 'All tests passed', stderr: ''),
         );
 
+        // Every collaborator is injected, including the validator. Left to its
+        // default, `handleImplementation` would construct a
+        // `DefaultGuardrailValidator` and run it over this very checkout, so
+        // an unrelated edit anywhere outside the package -- a workflow file,
+        // say -- would trip `checkPackageBoundary` and fail this test for
+        // reasons that have nothing to do with what it asserts.
         final harness = PackageHarness(
           context,
           nativeAnalyzer: MockNativeAnalyzer(),
           workspace: FakeWorkspace(),
           testRunner: mockRunner,
           codeGenerator: mockGen,
+          validator: MockGuardrailValidator(const ValidationResult(isValid: true)),
         );
         await harness.handleImplementation();
 
@@ -653,6 +660,7 @@ void main() {
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
+        validator: MockGuardrailValidator(const ValidationResult(isValid: true)),
       );
       await harness.handleImplementation();
 
@@ -685,6 +693,7 @@ void main() {
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
+        validator: MockGuardrailValidator(const ValidationResult(isValid: true)),
       );
       await harness.handleImplementation();
 
@@ -1150,6 +1159,7 @@ void main() {
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
+        validator: MockGuardrailValidator(const ValidationResult(isValid: true)),
       );
       await harness.handleImplementation();
 
@@ -1186,6 +1196,7 @@ void main() {
         testRunner: mockRunner,
         codeGenerator: mockGen,
         agent: mockAgent,
+        validator: MockGuardrailValidator(const ValidationResult(isValid: true)),
       );
       await harness.handleImplementation();
 
