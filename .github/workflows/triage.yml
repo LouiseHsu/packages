@@ -20,6 +20,9 @@ jobs:
       id-token: write
       contents: read
       issues: write
+      # Required by the "Dispatch resolve workflow" step below, which calls the
+      # workflow-dispatch API. Without it that call 403s.
+      actions: write
 
     # Run if triggered manually, or if issue mentions storekit, or has relevant labels
     if: >-
@@ -91,3 +94,24 @@ jobs:
           * **Reasoning**: ${REASONING}
 
           *This issue has been queued for autonomous SWE-bench verification and Draft PR generation.*"
+
+      # The `ai-accepted` label above is the human-visible record, but it cannot
+      # be what starts the resolve run. GitHub deliberately refuses to trigger a
+      # workflow from an event that a `GITHUB_TOKEN` caused, to stop workflows
+      # recursing into each other -- so `agent_resolve.yml`'s `issues: [labeled]`
+      # trigger stays inert when the label is applied by the step above. That is
+      # why the label previously had to be removed and re-added by hand.
+      #
+      # `workflow_dispatch` is the one documented exception: per GitHub's docs,
+      # "workflow_dispatch and repository_dispatch events always create workflow
+      # runs", even from `GITHUB_TOKEN`. So we dispatch explicitly. No PAT needed.
+      #
+      # The `issues: [labeled]` trigger on agent_resolve.yml is still worth
+      # keeping: it is how a human re-runs the resolver by hand.
+      - name: Dispatch resolve workflow
+        if: steps.run_triage.outputs.accepted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+        run: |
+          gh workflow run agent_resolve.yml -f issue_number="$ISSUE_NUMBER"
