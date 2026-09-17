@@ -266,7 +266,7 @@ String resolveDefaultModel({String? cliModel, String? packageDir}) {
 ///
 /// Looks for `fallover_models`, `failover_models`, `fallback_models`, `fallovers`,
 /// or `models` array in `.agents/config.json`.
-/// Defaults to: `['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-pro-latest']`.
+/// Defaults to: `['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-2.5-flash-lite']`.
 List<String> resolveFallbackModels({String? packageDir}) {
   final candidateDirs = <String>[
     if (packageDir != null)
@@ -307,14 +307,22 @@ List<String> resolveFallbackModels({String? packageDir}) {
     }
   }
 
-  // Ordered by observed availability, not capability. A CI run on 2026-09-16
-  // burned roughly six minutes before producing anything: gemini-3.7-flash
-  // returned 503 on all five attempts, gemini-pro-latest then returned 429 on
-  // all five, and gemini-3.6-flash succeeded on the first try. The work here is
-  // mechanical, so a model that answers beats a stronger one that is throttled.
-  // `pro` stays in the list as a last resort but is no longer in the hot path,
-  // since it is the most rate-limited of the three.
-  return const <String>['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-pro-latest'];
+  // Ordered by observed availability, not capability. The work here is
+  // mechanical field plumbing, so a model that answers beats a stronger one
+  // that is throttled.
+  //
+  // All Flash-only, deliberately. Across the CI runs on 2026-09-16 and
+  // 2026-09-17 every single 429 (quota exhausted) came from
+  // `gemini-pro-latest`; the Flash models only ever returned 503 (busy), which
+  // clears on retry. Pro has the smallest free-tier daily cap of the set, so
+  // leaving it in the chain meant one bad run could burn the whole day's quota
+  // on a model that adds nothing for this task.
+  //
+  // `gemini-2.5-flash-lite` is the tail entry because it is empirically known
+  // to serve traffic (it is also the default triage model). Do not swap it for
+  // `gemini-flash-lite-latest`, which only exists as a `normalizeModelName`
+  // alias target and has never been observed on the wire.
+  return const <String>['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-2.5-flash-lite'];
 }
 
 /// Builds the prompt passed to Gemini for generating an implementation fix.

@@ -806,7 +806,7 @@ void main() {
 
     test('resolveFallbackModels returns defaults when config file is missing', () {
       final List<String> defaults = resolveFallbackModels(packageDir: '/non_existent_path');
-      expect(defaults, <String>['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-pro-latest']);
+      expect(defaults, <String>['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-2.5-flash-lite']);
     });
 
     test(
@@ -814,10 +814,14 @@ void main() {
       () {
         final context = HarnessContext(issueNumber: 3, isDryRun: true);
         expect(context.model, 'gemini-3.6-flash');
+        // `.agents/config.json` is gitignored, so this assertion reads a local
+        // override on a developer machine and the hardcoded defaults in
+        // `resolveFallbackModels` on CI. Keep the two lists identical or this
+        // test passes in one place and fails in the other.
         expect(context.fallbackModels, <String>[
-          'gemini-pro-latest',
-          'gemini-3.7-flash',
           'gemini-3.6-flash',
+          'gemini-3.7-flash',
+          'gemini-2.5-flash-lite',
         ]);
         expect(context.maxRetries, 5);
       },
