@@ -95,6 +95,72 @@ void main() {
     });
   });
 
+  group('Red test must have run', () {
+    test('isCompileFailure recognises a suite that never loaded', () {
+      expect(
+        isCompileFailure(
+          '00:01 +0 -1: loading test/foo_test.dart [E]\n'
+          '  Failed to load "test/foo_test.dart":\n'
+          "  lib/src/bar.dart:12:5: Error: The method 'baz' isn't defined.",
+        ),
+        isTrue,
+      );
+    });
+
+    test('isCompileFailure is false for a test that ran and failed an assertion', () {
+      expect(
+        isCompileFailure(
+          '00:02 +0 -1: subscription status [E]\n'
+          '  Expected: <true>\n'
+          '    Actual: <false>\n'
+          '  package:test_api/src/expect/expect.dart 149:31  fail',
+        ),
+        isFalse,
+      );
+    });
+
+    test('isCompileFailure is false for UnimplementedError from a skeleton stub', () {
+      // The accept case: the skeleton compiled, the test ran, and it failed
+      // because the behaviour behind the declarations is missing.
+      expect(
+        isCompileFailure('00:02 +0 -1: subscription status [E]\n  UnimplementedError'),
+        isFalse,
+      );
+    });
+
+    test('red test that did not compile is rejected rather than verified', () async {
+      final context = HarnessContext(
+        issueNumber: 7,
+        isDryRun: false,
+        skipAgent: true,
+        testFilePath: 'test/in_app_purchase_storekit_2_platform_test.dart',
+        issueTitle: 'Expose StoreKit 2 subscription status',
+      );
+      context.transitionTo(HarnessPhase.redTest);
+
+      final mockRunner = MockTestRunner(
+        const TestRunResult(
+          exitCode: 1,
+          stdout:
+              '00:01 +0 -1: loading test/in_app_purchase_storekit_2_platform_test.dart [E]\n'
+              '  Failed to load "test/in_app_purchase_storekit_2_platform_test.dart":\n'
+              "  Error: The method 'subscriptionStatus' isn't defined.",
+          stderr: '',
+        ),
+      );
+
+      final harness = PackageHarness(
+        context,
+        nativeAnalyzer: MockNativeAnalyzer(),
+        testRunner: mockRunner,
+      );
+      await harness.handleRedTest();
+
+      expect(context.currentPhase, HarnessPhase.failed);
+      expect(context.failureReason, contains('did not compile'));
+    });
+  });
+
   group('FAIL_TO_PASS Gate Runner', () {
     test('transitions to implementation when test fails as expected on clean main', () async {
       final context = HarnessContext(

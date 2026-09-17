@@ -421,6 +421,33 @@ class GeminiHarnessAgent implements HarnessAgent {
         'type': 'STRING',
         'description': 'Name of the added reproduction test.',
       },
+      // Returned in the same call as the test, not a separate one. The test
+      // and the API shape it assumes have to agree, and the cheapest way to
+      // guarantee that is to have them authored together.
+      'skeleton': <String, dynamic>{
+        'type': 'ARRAY',
+        'description':
+            'Declarations-only stubs that make the test COMPILE but still FAIL. Add signatures, classes and fields the test needs; every method body must be `throw UnimplementedError();`. Never implement real behaviour here.',
+        'items': <String, dynamic>{
+          'type': 'OBJECT',
+          'properties': <String, dynamic>{
+            'file_path': <String, dynamic>{
+              'type': 'STRING',
+              'description': 'Relative path of the existing file to edit.',
+            },
+            'search_block': <String, dynamic>{
+              'type': 'STRING',
+              'description':
+                  'Exact existing code snippet to find. Keep it to 1-2 lines, such as the single line before the insertion point.',
+            },
+            'replace_block': <String, dynamic>{
+              'type': 'STRING',
+              'description': 'Replacement snippet containing the stub declarations.',
+            },
+          },
+          'required': <String>['file_path', 'search_block', 'replace_block'],
+        },
+      },
     },
     'required': <String>['file_path', 'test_code'],
   };
@@ -678,17 +705,33 @@ class GeminiHarnessAgent implements HarnessAgent {
     final systemInstruction =
         '''
 You are an expert Flutter engineer contributing to flutter/packages for ${context.packageName}.
-Your objective is to write a single reproduction unit test (TDD FAIL_TO_PASS).
-The test MUST assert the missing property, method, or reported bug on clean code.
-Because the feature is not implemented yet, this test MUST fail on clean code (e.g. referencing a getter that is not yet defined, or expecting a non-null value).
+Your objective is to write a single reproduction unit test (TDD FAIL_TO_PASS), plus the
+declarations that let it run.
+
+THE TEST MUST RUN AND FAIL. It must not fail by failing to compile.
+A test that does not compile has never executed a single assertion, so it proves nothing.
+You therefore return two things:
+
+1. `test_code`: the reproduction test. It MUST exercise real behaviour -- call the API and
+   assert on what comes back.
+2. `skeleton`: declarations-only stubs that make that test compile against clean code.
+   Add the classes, fields and method signatures the test names. EVERY method body must be
+   exactly `throw UnimplementedError();`. Do NOT implement the feature.
+
+The test will then be run against your skeleton, and it must FAIL at runtime.
+- If it fails to compile, your skeleton is incomplete and the attempt is rejected.
+- If it PASSES, your test asserts nothing that the missing feature controls, and the attempt
+  is rejected. A test that only constructs an object and reads its fields back always passes
+  against a skeleton. That is not a reproduction test.
 
 GUIDELINES:
 - STOREKIT 2 CONTRACT: StoreKit 2 is strictly Pigeon-typed. StoreKit 2 classes (SK2Transaction, SK2Product, etc.) DO NOT HAVE `fromMap`, `toMap`, or `fromJson` factory methods! NEVER call `.fromMap()` or `.toMap()`.
-- To test StoreKit 2, prefer calling the platform API methods (such as `await SK2Transaction.unfinishedTransactions()` or `await SK2Transaction.transactions()`) or instantiating the class directly with its named constructor (`SK2Transaction(...)`).
-- Note that `fakeStoreKit2Platform` (in `test/fakes/fake_storekit_platform.dart`) provides mock responses for platform methods like `unfinishedTransactions()`.
+- Test StoreKit 2 by calling the platform API (such as `await SK2Transaction.unfinishedTransactions()`), not by constructing a value object and reading its own fields back.
+- `fakeStoreKit2Platform` (in `test/fakes/fake_storekit_platform.dart`) provides the mock responses. Seed it with the data you expect, then assert that the API returns it.
+- StoreKit 2 tests must call `await InAppPurchaseStoreKitPlatform.enableStoreKit2()` in setUp or in the test, exactly as the existing StoreKit 2 groups do. Without it the platform throws `storekit2_not_enabled` and your test fails for the wrong reason.
 - Follow repo conventions and avoid redundant local type annotations (e.g. use `final x = ...`, not `final Type x = ...`).
-- Do NOT modify production files.
-- Provide your new test block in `test_code`. Return RAW code only without markdown code fences.
+- `test_code` must contain ONLY test code. Production changes belong in `skeleton`.
+- Return RAW code only, without markdown code fences.
 ''';
 
     // The whole test file, plus the fake it runs against.
@@ -761,6 +804,45 @@ $contextBuffer
 
     context.redTestCode = sanitizedCode;
     testFile.writeAsStringSync(updatedContent);
+
+    // Apply the declarations-only stubs so the test can actually run.
+    //
+    // The original content of every file touched is snapshotted first. The
+    // skeleton is a probe used to judge the test, not part of the fix, so the
+    // harness undoes it once the verdict is in and implementation starts from
+    // clean code.
+    final List<dynamic> rawSkeleton = response['skeleton'] as List<dynamic>? ?? <dynamic>[];
+    final skeletonLog = StringBuffer();
+    context.skeletonOriginals.clear();
+
+    for (final raw in rawSkeleton) {
+      final editMap = raw as Map<String, dynamic>;
+      final path = editMap['file_path'] as String;
+      final searchBlock = editMap['search_block'] as String;
+      final replaceBlock = editMap['replace_block'] as String;
+
+      final file = File('$packageDir/$path');
+      if (!file.existsSync()) {
+        throw StateError('File not found for skeleton stub: $path');
+      }
+      final String currentContent = file.readAsStringSync();
+      // Only the first edit to a file captures the pristine copy.
+      context.skeletonOriginals.putIfAbsent(path, () => currentContent);
+
+      file.writeAsStringSync(
+        applyTargetedEdit(
+          originalContent: currentContent,
+          searchBlock: searchBlock,
+          replaceBlock: replaceBlock,
+          filePath: path,
+        ),
+      );
+      skeletonLog
+        ..writeln('=== $path ===')
+        ..writeln(replaceBlock);
+    }
+
+    context.skeletonCode = skeletonLog.isEmpty ? null : skeletonLog.toString();
 
     return FilePatch(filePath: relativeTestFile, content: updatedContent);
   }

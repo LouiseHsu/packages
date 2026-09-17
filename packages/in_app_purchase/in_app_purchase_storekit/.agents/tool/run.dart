@@ -97,19 +97,20 @@ class TriageExecutionResult {
 typedef IssueFetcher = Future<Map<String, String>?> Function(int issueNumber, String? repo);
 
 /// Interface for evaluating an issue through the triage pipeline.
-typedef TriageEvaluator = Future<TriageExecutionResult> Function({
-  required String title,
-  required String body,
-  required int issueNumber,
-  String? apiKey,
-  String? gcpAccessToken,
-  String? gcpProjectId,
-  String? gcpLocation,
-  String? model,
-  List<String>? fallbackModels,
-  int minScore,
-  void Function(String message)? logger,
-});
+typedef TriageEvaluator =
+    Future<TriageExecutionResult> Function({
+      required String title,
+      required String body,
+      required int issueNumber,
+      String? apiKey,
+      String? gcpAccessToken,
+      String? gcpProjectId,
+      String? gcpLocation,
+      String? model,
+      List<String>? fallbackModels,
+      int minScore,
+      void Function(String message)? logger,
+    });
 
 /// Evaluates an issue through both Tier 1 and Tier 2 triage stages.
 Future<TriageExecutionResult> defaultTriageEvaluator({
@@ -132,10 +133,7 @@ Future<TriageExecutionResult> defaultTriageEvaluator({
     writeGithubOutput('accepted', 'false');
     writeGithubOutput('reason', 'heuristic_gate_filtered');
     log('Verdict: REJECTED (Failed Tier 1 regex heuristic)');
-    return const TriageExecutionResult(
-      accepted: false,
-      reason: 'heuristic_gate_filtered',
-    );
+    return const TriageExecutionResult(accepted: false, reason: 'heuristic_gate_filtered');
   }
 
   // Step 2: Gemini Structured Evaluation with failover
@@ -223,13 +221,7 @@ typedef HarnessRunner = Future<HarnessPhase> Function(HarnessContext context);
 /// Fetches issue metadata via the GitHub CLI (`gh issue view`).
 Future<Map<String, String>?> defaultIssueFetcher(int issueNumber, String? repo) async {
   try {
-    final ghArgs = <String>[
-      'issue',
-      'view',
-      issueNumber.toString(),
-      '--json',
-      'title,body',
-    ];
+    final ghArgs = <String>['issue', 'view', issueNumber.toString(), '--json', 'title,body'];
     if (repo != null && repo.isNotEmpty) {
       ghArgs.addAll(<String>['--repo', repo]);
     }
@@ -260,7 +252,9 @@ void printPipelineUsage([void Function(String)? sink]) {
   printLine('Usage: dart run .agents/tool/run.dart [options]');
   printLine('');
   printLine('Options:');
-  printLine('  --issue=<number>        Target GitHub issue number (fetches title & body via gh CLI)');
+  printLine(
+    '  --issue=<number>        Target GitHub issue number (fetches title & body via gh CLI)',
+  );
   printLine('  --title=<string>        Issue title (if specifying directly or testing offline)');
   printLine('  --body=<string>         Issue body (optional additional context)');
   printLine('  --repo=<owner/repo>     Target GitHub repository (default: LouiseHsu/packages)');
@@ -269,9 +263,15 @@ void printPipelineUsage([void Function(String)? sink]) {
   printLine('  --test=<path>           Target test file path');
   printLine('  --model=<name>          Gemini model name');
   printLine('  --skip-triage           Skip triage evaluation and directly execute harness');
-  printLine('  --triage-only           Run triage evaluation and exit with verdict without running harness');
-  printLine('  --min-triage-score=<N>  Minimum score (0-10) required to accept issue in triage (default: 7)');
-  printLine('  --dry-run               Dry run mode: skip mutating code generation and PR creation');
+  printLine(
+    '  --triage-only           Run triage evaluation and exit with verdict without running harness',
+  );
+  printLine(
+    '  --min-triage-score=<N>  Minimum score (0-10) required to accept issue in triage (default: 7)',
+  );
+  printLine(
+    '  --dry-run               Dry run mode: skip mutating code generation and PR creation',
+  );
   printLine('  --publish-pr            Publish Draft PR upon successful resolution');
   printLine('  --max-retries=<number>  Max implementation attempts (default: 5)');
   printLine('  --help, -h              Show this help message');
@@ -373,7 +373,9 @@ Future<int> runPipeline(
   // 1. Resolve Issue Metadata (Title & Body)
   if (options.issueTitle.isEmpty) {
     if (options.issueNumber == null) {
-      errLog('Error: Missing issue specification. Provide --issue=<number> or --title="<title>".\n');
+      errLog(
+        'Error: Missing issue specification. Provide --issue=<number> or --title="<title>".\n',
+      );
       printPipelineUsage(errLog);
       return 1;
     }
@@ -415,9 +417,7 @@ Future<int> runPipeline(
     // `options.model`. The fallback list is shared either way, so a cheap
     // primary model that is throttled or down still fails over instead of
     // aborting the run.
-    final List<String> fallbackModels = resolveFallbackModels(
-      packageDir: resolvedPackageDir,
-    );
+    final List<String> fallbackModels = resolveFallbackModels(packageDir: resolvedPackageDir);
 
     final TriageExecutionResult triageResult = await evaluateTriage(
       title: options.issueTitle,
@@ -453,7 +453,9 @@ Future<int> runPipeline(
 
     log('✅ Issue #$effectiveIssueNumber passed triage evaluation!');
     if (triageResult.verdict != null) {
-      log('Triage Verdict: Category=${triageResult.verdict!.category}, Score=${triageResult.verdict!.suitabilityScore}/10');
+      log(
+        'Triage Verdict: Category=${triageResult.verdict!.category}, Score=${triageResult.verdict!.suitabilityScore}/10',
+      );
     }
 
     if (options.triageOnly) {
@@ -492,8 +494,10 @@ Future<int> runPipeline(
     // Surface it as a failure so CI does not report a misleading green run.
     if (options.publishPr && context.prPublishFailureReason != null) {
       errLog('=================== PIPELINE FAILURE ===================');
-      errLog('🛑 Issue #$effectiveIssueNumber was resolved and verified, but the Draft PR '
-          'could not be published: ${context.prPublishFailureReason}');
+      errLog(
+        '🛑 Issue #$effectiveIssueNumber was resolved and verified, but the Draft PR '
+        'could not be published: ${context.prPublishFailureReason}',
+      );
       errLog('The verified changes remain in the working tree.');
       return 1;
     }

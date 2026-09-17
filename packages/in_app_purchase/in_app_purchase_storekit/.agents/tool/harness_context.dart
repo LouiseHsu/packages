@@ -138,6 +138,18 @@ class RunState {
   /// The reproduction unit test code generated or used in Phase 1 (FAIL_TO_PASS).
   String? redTestCode;
 
+  /// Declarations-only stubs the agent supplied alongside the red test.
+  ///
+  /// Recorded for artifacts. This is the API shape the test demands, with no
+  /// behaviour behind it, used to prove the test can actually run.
+  String? skeletonCode;
+
+  /// Original contents of every file the skeleton touched, keyed by path.
+  ///
+  /// The skeleton is a probe, not part of the fix, so it is undone once the
+  /// red test has been judged. Implementation always starts from clean code.
+  final Map<String, String> skeletonOriginals = <String, String>{};
+
   /// Reason recorded upon harness failure.
   String? failureReason;
 
@@ -436,6 +448,13 @@ class HarnessContext {
   /// The reproduction unit test code generated or used in Phase 1.
   String? get redTestCode => state.redTestCode;
   set redTestCode(String? value) => state.redTestCode = value;
+
+  /// Declarations-only stubs supplied alongside the red test.
+  String? get skeletonCode => state.skeletonCode;
+  set skeletonCode(String? value) => state.skeletonCode = value;
+
+  /// Original contents of every file the skeleton touched, keyed by path.
+  Map<String, String> get skeletonOriginals => state.skeletonOriginals;
 
   /// Reason recorded upon harness failure.
   String? get failureReason => state.failureReason;

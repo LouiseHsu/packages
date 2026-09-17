@@ -16,6 +16,24 @@ import 'workspace.dart';
 
 export 'harness_context.dart';
 
+/// Whether [testOutput] shows the test failing to build rather than running.
+///
+/// The red gate needs this distinction and the exit code does not provide it:
+/// `flutter test` exits 1 both when a test compiles and fails an assertion and
+/// when it never compiled at all. Only the first is evidence about the test.
+///
+/// The markers are the ones the Dart test runner emits when it cannot load a
+/// suite; an assertion failure produces neither.
+bool isCompileFailure(String testOutput) {
+  const markers = <String>[
+    'Failed to load',
+    'Compilation failed',
+    'Compilation error',
+    'Error when reading',
+  ];
+  return markers.any(testOutput.contains);
+}
+
 /// The deterministic controller that steps through each harness phase.
 class PackageHarness {
   /// Creates a [PackageHarness] with an optional [testRunner], [validator], [codeGenerator], [nativeAnalyzer], [workspace], and [agent].
@@ -276,6 +294,7 @@ class PackageHarness {
       if (!context.skipAgent) {
         // Revert file to clean content before each attempt
         testFile.writeAsStringSync(initialContent);
+        _restoreSkeletonFiles(targetDir);
 
         context.log(
           'Red test attempt $attempt of $maxAttempts: querying Gemini to generate reproduction unit test for Issue #${context.issueNumber}...',
@@ -283,10 +302,17 @@ class PackageHarness {
         try {
           final FilePatch patch = await agent.generateRedTest(context);
           context.log('Applied red test patch: ${patch.filePath} (${patch.content.length} chars)');
+          if (context.skeletonOriginals.isNotEmpty) {
+            context.log(
+              'Applied skeleton stubs to ${context.skeletonOriginals.length} file(s): '
+              '${context.skeletonOriginals.keys.join(', ')}',
+            );
+          }
         } catch (e) {
           lastFailureReason = 'Agent failed to generate red test: $e';
           context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
           context.state.recordAttemptFailure(lastFailureReason);
+          context.recordArtifact('red_test_attempt_${attempt}_generation_error.txt', '$e');
           if (_shouldStopRetrying(attempt, maxAttempts)) {
             break;
           }
@@ -301,9 +327,16 @@ class PackageHarness {
       );
 
       if (result.passed) {
-        lastFailureReason =
-            'FAIL_TO_PASS Invariant Violated: Test passed on clean main. '
-            'A reproduction test must fail before production changes are applied.';
+        // Against a skeleton whose method bodies all throw, a passing test has
+        // demonstrated that nothing it asserts depends on the missing feature.
+        // This is exactly the null test that let run 5 through.
+        lastFailureReason = context.skeletonOriginals.isEmpty
+            ? 'FAIL_TO_PASS Invariant Violated: Test passed on clean main. '
+                  'A reproduction test must fail before production changes are applied.'
+            : 'FAIL_TO_PASS Invariant Violated: Test PASSED against a skeleton whose method '
+                  'bodies all throw UnimplementedError. It therefore asserts nothing that the '
+                  'missing feature controls. Construct-then-read-fields-back tests always pass '
+                  'this way. Call the API and assert on what it returns.';
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
         // Record the generated test alongside the reason. The reason alone is a
         // fixed string, so without this every attempt would look identical and
@@ -314,7 +347,7 @@ class PackageHarness {
         );
         context.recordArtifact(
           'red_test_attempt_${attempt}_passed_unexpectedly.txt',
-          'Test passed on clean main (exit code 0):\n${result.stdout}\n${result.stderr}'.trim(),
+          'Test passed (exit code 0):\n${result.stdout}\n${result.stderr}'.trim(),
         );
         if (_shouldStopRetrying(attempt, maxAttempts)) {
           break;
@@ -340,6 +373,28 @@ class PackageHarness {
         continue;
       }
 
+      // The test must have RUN. A compile error means no assertion ever
+      // executed, so the failure says nothing about whether the test is any
+      // good -- and for an additive API issue, a test naming a symbol that
+      // does not exist yet ALWAYS fails this way. That is the whole reason
+      // the skeleton exists.
+      if (isCompileFailure(result.stdout + result.stderr)) {
+        lastFailureReason = context.skeletonOriginals.isEmpty
+            ? 'FAIL_TO_PASS Invariant Violated: The test did not compile, and you supplied no '
+                  'skeleton. Provide declarations-only stubs in `skeleton` so the test can run '
+                  'and fail on its assertions instead of on a compile error.'
+            : 'FAIL_TO_PASS Invariant Violated: The test did not compile. Your skeleton is '
+                  'incomplete -- it must declare every symbol the test names. Fix the errors '
+                  'below by adding the missing declarations to `skeleton`.';
+        context.log('⚠️ Attempt $attempt rejected: $lastFailureReason');
+        context.state.recordAttemptFailure('$lastFailureReason\n$summary');
+        context.recordArtifact('red_test_attempt_${attempt}_did_not_compile.txt', summary);
+        if (_shouldStopRetrying(attempt, maxAttempts)) {
+          break;
+        }
+        continue;
+      }
+
       context.recordArtifact(
         'red_test_attempt_${attempt}_verified_failure.txt',
         result.failureSummary,
@@ -347,26 +402,49 @@ class PackageHarness {
       if (context.redTestCode != null) {
         context.recordArtifact('red_test_attempt_${attempt}_code.dart', context.redTestCode!);
       }
+      if (context.skeletonCode != null) {
+        context.recordArtifact('red_test_attempt_${attempt}_skeleton.txt', context.skeletonCode!);
+      }
       context.lastTestFailureSummary = result.failureSummary;
       // Preserved for the Draft PR: this is the evidence the bug was real, and
       // the only way a reviewer can check the test failed for the right reason.
       context.state.verifiedRedFailureSummary = result.failureSummary;
       context.log(
-        '✅ FAIL_TO_PASS verified: Red test failed as expected with exit code ${result.exitCode}.',
+        '✅ FAIL_TO_PASS verified: Red test ran and failed at runtime with exit code '
+        '${result.exitCode}.',
       );
       context.log('Captured failure snippet:\n${result.failureSummary}');
+
+      // The skeleton has served its purpose. Implementation starts from clean
+      // code, so a half-written stub can never be mistaken for the fix.
+      _restoreSkeletonFiles(targetDir);
       context.transitionTo(
         HarnessPhase.implementation,
-        reason: 'FAIL_TO_PASS verified (test failed as expected)',
+        reason: 'FAIL_TO_PASS verified (test ran and failed at runtime)',
       );
       return;
     }
 
     testFile.writeAsStringSync(initialContent);
+    _restoreSkeletonFiles(targetDir);
     context.failureReason =
         lastFailureReason ?? 'FAIL_TO_PASS verification failed after $maxAttempts attempt(s).';
     context.log('❌ ${context.failureReason}');
     context.transitionTo(HarnessPhase.failed, reason: context.failureReason);
+  }
+
+  /// Undoes the skeleton stubs, restoring every file the probe touched.
+  void _restoreSkeletonFiles(String targetDir) {
+    if (context.skeletonOriginals.isEmpty) {
+      return;
+    }
+    context.skeletonOriginals.forEach((String path, String original) {
+      final file = File(resolvePath(targetDir, path));
+      file.writeAsStringSync(original);
+    });
+    context.log('Reverted skeleton stubs in ${context.skeletonOriginals.length} file(s).');
+    context.skeletonOriginals.clear();
+    context.skeletonCode = null;
   }
 
   /// Phase 2 (PASS_TO_PASS): Implementation verification.

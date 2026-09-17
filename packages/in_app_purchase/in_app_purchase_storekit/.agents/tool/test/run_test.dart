@@ -70,24 +70,24 @@ void main() {
   group('Pipeline Orchestration & Triage Integration', () {
     test('returns 0 and prints usage when --help is passed', () async {
       final logs = <String>[];
-      final int exitCode = await runPipeline(
-        <String>['--help'],
-        logger: logs.add,
-      );
+      final int exitCode = await runPipeline(<String>['--help'], logger: logs.add);
 
       expect(exitCode, 0);
-      expect(logs.any((String line) => line.contains('Usage: dart run .agents/tool/run.dart')), isTrue);
+      expect(
+        logs.any((String line) => line.contains('Usage: dart run .agents/tool/run.dart')),
+        isTrue,
+      );
     });
 
     test('fails with error 1 when no issue number or title is provided', () async {
       final errLogs = <String>[];
-      final int exitCode = await runPipeline(
-        <String>[],
-        errorLogger: errLogs.add,
-      );
+      final int exitCode = await runPipeline(<String>[], errorLogger: errLogs.add);
 
       expect(exitCode, 1);
-      expect(errLogs.any((String line) => line.contains('Error: Missing issue specification')), isTrue);
+      expect(
+        errLogs.any((String line) => line.contains('Error: Missing issue specification')),
+        isTrue,
+      );
     });
 
     test('fails with error 1 when gh CLI fetch fails to resolve issue title', () async {
@@ -103,7 +103,9 @@ void main() {
 
       expect(exitCode, 1);
       expect(
-        errLogs.any((String line) => line.contains('Could not resolve issue #999 title from GitHub')),
+        errLogs.any(
+          (String line) => line.contains('Could not resolve issue #999 title from GitHub'),
+        ),
         isTrue,
       );
     });
@@ -114,24 +116,25 @@ void main() {
 
       final int exitCode = await runPipeline(
         <String>['--issue=50', '--title=Flaky purchase timeout on cellular'],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          return const TriageExecutionResult(
-            accepted: false,
-            reason: 'heuristic_gate_filtered',
-          );
-        },
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              return const TriageExecutionResult(
+                accepted: false,
+                reason: 'heuristic_gate_filtered',
+              );
+            },
         harnessRunner: (HarnessContext context) async {
           harnessCalled = true;
           return HarnessPhase.complete;
@@ -141,7 +144,10 @@ void main() {
 
       expect(exitCode, 0);
       expect(harnessCalled, isFalse);
-      expect(logs.any((String line) => line.contains('declined by triage (heuristic_gate_filtered)')), isTrue);
+      expect(
+        logs.any((String line) => line.contains('declined by triage (heuristic_gate_filtered)')),
+        isTrue,
+      );
     });
 
     test('exits non-zero when triage errors rather than declining', () async {
@@ -150,25 +156,26 @@ void main() {
 
       final int exitCode = await runPipeline(
         <String>['--issue=51', '--title=Expose originalPurchaseDate on SK2Transaction'],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          return const TriageExecutionResult(
-            accepted: false,
-            reason: 'evaluation_error: 503 UNAVAILABLE',
-            isError: true,
-          );
-        },
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              return const TriageExecutionResult(
+                accepted: false,
+                reason: 'evaluation_error: 503 UNAVAILABLE',
+                isError: true,
+              );
+            },
         harnessRunner: (HarnessContext context) async {
           harnessCalled = true;
           return HarnessPhase.complete;
@@ -180,10 +187,7 @@ void main() {
       // green while the issue silently goes unassessed.
       expect(exitCode, 1);
       expect(harnessCalled, isFalse);
-      expect(
-        logs.any((String line) => line.contains('could not evaluate issue #51')),
-        isTrue,
-      );
+      expect(logs.any((String line) => line.contains('could not evaluate issue #51')), isTrue);
       // It must not be described as a rejection.
       expect(logs.any((String line) => line.contains('declined by triage')), isFalse);
     });
@@ -199,26 +203,24 @@ void main() {
 
       await runPipeline(
         <String>['--issue=52', '--title=Expose originalPurchaseDate on SK2Transaction'],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          capturedModel = model;
-          capturedFallbacks = fallbackModels;
-          return const TriageExecutionResult(
-            accepted: false,
-            reason: 'not_mechanical',
-          );
-        },
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              capturedModel = model;
+              capturedFallbacks = fallbackModels;
+              return const TriageExecutionResult(accepted: false, reason: 'not_mechanical');
+            },
         harnessRunner: (HarnessContext context) async => HarnessPhase.complete,
         logger: (String _) {},
       );
@@ -239,25 +241,23 @@ void main() {
           '--title=Expose originalPurchaseDate on SK2Transaction',
           '--model=gemini-3.6-flash',
         ],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          capturedModel = model;
-          return const TriageExecutionResult(
-            accepted: false,
-            reason: 'not_mechanical',
-          );
-        },
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              capturedModel = model;
+              return const TriageExecutionResult(accepted: false, reason: 'not_mechanical');
+            },
         harnessRunner: (HarnessContext context) async => HarnessPhase.complete,
         logger: (String _) {},
       );
@@ -270,36 +270,33 @@ void main() {
       var harnessCalled = false;
 
       final int exitCode = await runPipeline(
-        <String>[
-          '--issue=12',
-          '--title=Expose expirationDate in SK2Transaction',
-          '--triage-only',
-        ],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          return const TriageExecutionResult(
-            accepted: true,
-            reason: 'accepted',
-            verdict: TriageVerdict(
-              isMechanical: true,
-              suitabilityScore: 9,
-              category: 'missing_field',
-              targetFilesHint: <String>['pigeons/sk2_pigeon.dart'],
-              reasoning: 'Mechanical field addition.',
-            ),
-          );
-        },
+        <String>['--issue=12', '--title=Expose expirationDate in SK2Transaction', '--triage-only'],
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              return const TriageExecutionResult(
+                accepted: true,
+                reason: 'accepted',
+                verdict: TriageVerdict(
+                  isMechanical: true,
+                  suitabilityScore: 9,
+                  category: 'missing_field',
+                  targetFilesHint: <String>['pigeons/sk2_pigeon.dart'],
+                  reasoning: 'Mechanical field addition.',
+                ),
+              );
+            },
         harnessRunner: (HarnessContext context) async {
           harnessCalled = true;
           return HarnessPhase.complete;
@@ -318,27 +315,24 @@ void main() {
       var harnessCalled = false;
 
       final int exitCode = await runPipeline(
-        <String>[
-          '--issue=15',
-          '--title=Expose offerID in SK2Transaction',
-          '--skip-triage',
-        ],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          triageCalled = true;
-          return const TriageExecutionResult(accepted: true, reason: 'accepted');
-        },
+        <String>['--issue=15', '--title=Expose offerID in SK2Transaction', '--skip-triage'],
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              triageCalled = true;
+              return const TriageExecutionResult(accepted: true, reason: 'accepted');
+            },
         harnessRunner: (HarnessContext context) async {
           harnessCalled = true;
           expect(context.issueNumber, 15);
@@ -351,7 +345,10 @@ void main() {
       expect(exitCode, 0);
       expect(triageCalled, isFalse);
       expect(harnessCalled, isTrue);
-      expect(logs.any((String line) => line.contains('Triage evaluation skipped via --skip-triage')), isTrue);
+      expect(
+        logs.any((String line) => line.contains('Triage evaluation skipped via --skip-triage')),
+        isTrue,
+      );
     });
 
     test('runs end-to-end: triage accepts -> harness executes -> draft PR logged', () async {
@@ -365,31 +362,32 @@ void main() {
           '--publish-pr',
           '--dry-run',
         ],
-        triageEvaluator: ({
-          required String title,
-          required String body,
-          required int issueNumber,
-          String? apiKey,
-          String? gcpAccessToken,
-          String? gcpProjectId,
-          String? gcpLocation,
-          String? model,
-          List<String>? fallbackModels,
-          int minScore = 7,
-          void Function(String message)? logger,
-        }) async {
-          return const TriageExecutionResult(
-            accepted: true,
-            reason: 'accepted',
-            verdict: TriageVerdict(
-              isMechanical: true,
-              suitabilityScore: 10,
-              category: 'missing_field',
-              targetFilesHint: <String>['pigeons/sk2_pigeon.dart'],
-              reasoning: 'Mechanical addition.',
-            ),
-          );
-        },
+        triageEvaluator:
+            ({
+              required String title,
+              required String body,
+              required int issueNumber,
+              String? apiKey,
+              String? gcpAccessToken,
+              String? gcpProjectId,
+              String? gcpLocation,
+              String? model,
+              List<String>? fallbackModels,
+              int minScore = 7,
+              void Function(String message)? logger,
+            }) async {
+              return const TriageExecutionResult(
+                accepted: true,
+                reason: 'accepted',
+                verdict: TriageVerdict(
+                  isMechanical: true,
+                  suitabilityScore: 10,
+                  category: 'missing_field',
+                  targetFilesHint: <String>['pigeons/sk2_pigeon.dart'],
+                  reasoning: 'Mechanical addition.',
+                ),
+              );
+            },
         harnessRunner: (HarnessContext context) async {
           executedContext = context;
           context.publishedPrUrl = 'https://github.com/LouiseHsu/packages/pull/555';
@@ -404,7 +402,13 @@ void main() {
       expect(executedContext!.issueTitle, 'Expose appAccountToken in SK2Product');
       expect(executedContext!.publishPr, isTrue);
       expect(executedContext!.isDryRun, isTrue);
-      expect(logs.any((String line) => line.contains('Published Draft PR: https://github.com/LouiseHsu/packages/pull/555')), isTrue);
+      expect(
+        logs.any(
+          (String line) =>
+              line.contains('Published Draft PR: https://github.com/LouiseHsu/packages/pull/555'),
+        ),
+        isTrue,
+      );
     });
 
     test('returns exit code 1 when harness fails', () async {
@@ -412,11 +416,7 @@ void main() {
       final errLogs = <String>[];
 
       final int exitCode = await runPipeline(
-        <String>[
-          '--issue=99',
-          '--title=Impossible architectural change',
-          '--skip-triage',
-        ],
+        <String>['--issue=99', '--title=Impossible architectural change', '--skip-triage'],
         harnessRunner: (HarnessContext context) async {
           context.failureReason = 'Max retries exceeded';
           return HarnessPhase.failed;
@@ -426,41 +426,50 @@ void main() {
       );
 
       expect(exitCode, 1);
-      expect(errLogs.any((String line) => line.contains('Pipeline failed in phase HarnessPhase.failed: Max retries exceeded')), isTrue);
-    });
-
-    test('returns exit code 1 when the fix is verified but the Draft PR fails to publish', () async {
-      final logs = <String>[];
-      final errLogs = <String>[];
-
-      final int exitCode = await runPipeline(
-        <String>[
-          '--issue=7',
-          '--title=Expose originalPurchaseDate in SK2Transaction',
-          '--skip-triage',
-          '--publish-pr',
-        ],
-        harnessRunner: (HarnessContext context) async {
-          // Verification succeeded, but publishing did not.
-          context.prPublishFailureReason = 'Failed to stage files: pathspec did not match';
-          return HarnessPhase.complete;
-        },
-        logger: logs.add,
-        errorLogger: errLogs.add,
-      );
-
-      expect(exitCode, 1);
       expect(
-        errLogs.any((String line) => line.contains('Failed to stage files')),
+        errLogs.any(
+          (String line) =>
+              line.contains('Pipeline failed in phase HarnessPhase.failed: Max retries exceeded'),
+        ),
         isTrue,
-        reason: 'The publish failure reason must be surfaced to stderr.',
-      );
-      expect(
-        logs.any((String line) => line.contains('PIPELINE SUCCESS')),
-        isFalse,
-        reason: 'A run with no published PR must not be reported as a success.',
       );
     });
+
+    test(
+      'returns exit code 1 when the fix is verified but the Draft PR fails to publish',
+      () async {
+        final logs = <String>[];
+        final errLogs = <String>[];
+
+        final int exitCode = await runPipeline(
+          <String>[
+            '--issue=7',
+            '--title=Expose originalPurchaseDate in SK2Transaction',
+            '--skip-triage',
+            '--publish-pr',
+          ],
+          harnessRunner: (HarnessContext context) async {
+            // Verification succeeded, but publishing did not.
+            context.prPublishFailureReason = 'Failed to stage files: pathspec did not match';
+            return HarnessPhase.complete;
+          },
+          logger: logs.add,
+          errorLogger: errLogs.add,
+        );
+
+        expect(exitCode, 1);
+        expect(
+          errLogs.any((String line) => line.contains('Failed to stage files')),
+          isTrue,
+          reason: 'The publish failure reason must be surfaced to stderr.',
+        );
+        expect(
+          logs.any((String line) => line.contains('PIPELINE SUCCESS')),
+          isFalse,
+          reason: 'A run with no published PR must not be reported as a success.',
+        );
+      },
+    );
 
     test('returns exit code 0 on publish failure when --publish-pr was not requested', () async {
       final logs = <String>[];
