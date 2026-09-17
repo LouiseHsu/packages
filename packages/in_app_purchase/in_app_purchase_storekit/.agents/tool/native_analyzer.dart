@@ -106,7 +106,19 @@ class SwiftTypecheckAnalyzer implements NativeAnalyzer {
       return const NativeAnalysisResult.skipped('Swift type-checking requires macOS.');
     }
 
-    final darwinDir = Directory('$packagePath/darwin');
+    // Resolve to an absolute path up front. `swiftc` is launched with
+    // `workingDirectory` set to this same path, and every include and source
+    // path handed to it is derived from it, so a relative value resolves twice
+    // and lands somewhere that does not exist. The compiler then fails to
+    // build the bridging header and reports what looks like a genuine type
+    // error, which fails an implementation attempt that was actually fine.
+    //
+    // Callers differ: run.dart is invoked from the repository root in CI, so
+    // it passes a repo-relative path, while a developer running inside the
+    // package passes an absolute one. Only the CI shape was broken.
+    final String rootPath = Directory(packagePath).absolute.path;
+
+    final darwinDir = Directory('$rootPath/darwin');
     if (!darwinDir.existsSync()) {
       return const NativeAnalysisResult.skipped('No darwin/ directory found.');
     }
@@ -150,7 +162,7 @@ class SwiftTypecheckAnalyzer implements NativeAnalyzer {
 
       args.addAll(sources);
 
-      final ProcessResult result = await Process.run('swiftc', args, workingDirectory: packagePath);
+      final ProcessResult result = await Process.run('swiftc', args, workingDirectory: rootPath);
       return NativeAnalysisResult(
         exitCode: result.exitCode,
         stdout: result.stdout as String? ?? '',
