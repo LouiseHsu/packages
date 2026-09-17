@@ -69,6 +69,19 @@ enum SK2SubscriptionOfferType {
   winBack,
 }
 
+extension on SK2SubscriptionOfferType {
+  SK2SubscriptionOfferTypeMessage convertToPigeon() {
+    switch (this) {
+      case SK2SubscriptionOfferType.introductory:
+        return SK2SubscriptionOfferTypeMessage.introductory;
+      case SK2SubscriptionOfferType.promotional:
+        return SK2SubscriptionOfferTypeMessage.promotional;
+      case SK2SubscriptionOfferType.winBack:
+        return SK2SubscriptionOfferTypeMessage.winBack;
+    }
+  }
+}
+
 extension on SK2SubscriptionOfferTypeMessage {
   SK2SubscriptionOfferType convertFromPigeon() {
     switch (this) {
@@ -113,6 +126,18 @@ class SK2SubscriptionOffer {
 
   /// The payment modes for subscription offers that apply to a transaction.
   final SK2SubscriptionOfferPaymentMode paymentMode;
+
+  /// Converts this instance of [SK2SubscriptionOffer] to its pigeon representation [SK2SubscriptionOfferMessage].
+  SK2SubscriptionOfferMessage convertToPigeon() {
+    return SK2SubscriptionOfferMessage(
+      id: id,
+      price: price,
+      type: type.convertToPigeon(),
+      period: period.convertToPigeon(),
+      periodCount: periodCount,
+      paymentMode: paymentMode.convertToPigeon(),
+    );
+  }
 }
 
 extension on SK2SubscriptionOfferMessage {
@@ -148,6 +173,30 @@ class SK2SubscriptionInfo {
 
   /// The duration that this subscription lasts before auto-renewing.
   final SK2SubscriptionPeriod subscriptionPeriod;
+
+  /// Returns the status of all subscriptions in the given subscription group.
+  /// https://developer.apple.com/documentation/storekit/product/subscriptioninfo/3822337-status
+  static Future<List<SK2SubscriptionStatus>> status(String subscriptionGroupID) async {
+    final List<SK2SubscriptionStatusMessage?> statusMsgs = await hostApi2.subscriptionStatus(
+      subscriptionGroupID,
+    );
+
+    return statusMsgs
+        .whereType<SK2SubscriptionStatusMessage>()
+        .map((SK2SubscriptionStatusMessage statusMsg) => statusMsg.convertFromPigeon())
+        .toList();
+  }
+
+  /// Converts this instance of [SK2SubscriptionInfo] to its pigeon representation [SK2SubscriptionInfoMessage].
+  SK2SubscriptionInfoMessage convertToPigeon() {
+    return SK2SubscriptionInfoMessage(
+      subscriptionGroupID: subscriptionGroupID,
+      promotionalOffers: promotionalOffers
+          .map((SK2SubscriptionOffer offer) => offer.convertToPigeon())
+          .toList(),
+      subscriptionPeriod: subscriptionPeriod.convertToPigeon(),
+    );
+  }
 }
 
 extension on SK2SubscriptionInfoMessage {
@@ -174,6 +223,11 @@ class SK2SubscriptionPeriod {
 
   /// The unit of time that this period represents.
   final SK2SubscriptionPeriodUnit unit;
+
+  /// Converts this instance of [SK2SubscriptionPeriod] to its pigeon representation [SK2SubscriptionPeriodMessage].
+  SK2SubscriptionPeriodMessage convertToPigeon() {
+    return SK2SubscriptionPeriodMessage(value: value, unit: unit.convertToPigeon());
+  }
 }
 
 extension on SK2SubscriptionPeriodMessage {
@@ -197,6 +251,21 @@ enum SK2SubscriptionPeriodUnit {
 
   /// A subscription period unit of a year.
   year,
+}
+
+extension on SK2SubscriptionPeriodUnit {
+  SK2SubscriptionPeriodUnitMessage convertToPigeon() {
+    switch (this) {
+      case SK2SubscriptionPeriodUnit.day:
+        return SK2SubscriptionPeriodUnitMessage.day;
+      case SK2SubscriptionPeriodUnit.week:
+        return SK2SubscriptionPeriodUnitMessage.week;
+      case SK2SubscriptionPeriodUnit.month:
+        return SK2SubscriptionPeriodUnitMessage.month;
+      case SK2SubscriptionPeriodUnit.year:
+        return SK2SubscriptionPeriodUnitMessage.year;
+    }
+  }
 }
 
 extension on SK2SubscriptionPeriodUnitMessage {
@@ -227,6 +296,19 @@ enum SK2SubscriptionOfferPaymentMode {
   freeTrial,
 }
 
+extension on SK2SubscriptionOfferPaymentMode {
+  SK2SubscriptionOfferPaymentModeMessage convertToPigeon() {
+    switch (this) {
+      case SK2SubscriptionOfferPaymentMode.payAsYouGo:
+        return SK2SubscriptionOfferPaymentModeMessage.payAsYouGo;
+      case SK2SubscriptionOfferPaymentMode.payUpFront:
+        return SK2SubscriptionOfferPaymentModeMessage.payUpFront;
+      case SK2SubscriptionOfferPaymentMode.freeTrial:
+        return SK2SubscriptionOfferPaymentModeMessage.freeTrial;
+    }
+  }
+}
+
 extension on SK2SubscriptionOfferPaymentModeMessage {
   SK2SubscriptionOfferPaymentMode convertFromPigeon() {
     switch (this) {
@@ -237,6 +319,84 @@ extension on SK2SubscriptionOfferPaymentModeMessage {
       case SK2SubscriptionOfferPaymentModeMessage.freeTrial:
         return SK2SubscriptionOfferPaymentMode.freeTrial;
     }
+  }
+}
+
+/// A wrapper around StoreKit2's SubscriptionInfo.RenewalState
+/// https://developer.apple.com/documentation/storekit/product/subscriptioninfo/renewalstate
+enum SK2RenewalState {
+  /// The subscription is active.
+  subscribed,
+
+  /// The subscription has expired.
+  expired,
+
+  /// The subscription is in a grace period.
+  inGracePeriod,
+
+  /// The subscription is in a billing retry period.
+  inBillingRetryPeriod,
+
+  /// The subscription was revoked by the App Store.
+  revoked,
+}
+
+extension on SK2RenewalStateMessage {
+  SK2RenewalState convertFromPigeon() {
+    switch (this) {
+      case SK2RenewalStateMessage.subscribed:
+        return SK2RenewalState.subscribed;
+      case SK2RenewalStateMessage.expired:
+        return SK2RenewalState.expired;
+      case SK2RenewalStateMessage.inGracePeriod:
+        return SK2RenewalState.inGracePeriod;
+      case SK2RenewalStateMessage.inBillingRetryPeriod:
+        return SK2RenewalState.inBillingRetryPeriod;
+      case SK2RenewalStateMessage.revoked:
+        return SK2RenewalState.revoked;
+    }
+  }
+}
+
+/// A wrapper around StoreKit2's SubscriptionInfo.RenewalInfo
+/// https://developer.apple.com/documentation/storekit/product/subscriptioninfo/renewalinfo
+class SK2RenewalInfo {
+  /// Creates a new instance of [SK2RenewalInfo].
+  const SK2RenewalInfo({this.autoRenewPreference, required this.willAutoRenew});
+
+  /// The product identifier that the subscription will auto-renew to at the end
+  /// of the current billing period, or null if auto-renew is disabled.
+  final String? autoRenewPreference;
+
+  /// Whether the subscription will auto-renew at the end of the current billing period.
+  final bool willAutoRenew;
+}
+
+extension on SK2RenewalInfoMessage {
+  SK2RenewalInfo convertFromPigeon() {
+    return SK2RenewalInfo(autoRenewPreference: autoRenewPreference, willAutoRenew: willAutoRenew);
+  }
+}
+
+/// A wrapper around StoreKit2's SubscriptionInfo.Status
+/// https://developer.apple.com/documentation/storekit/product/subscriptioninfo/status
+class SK2SubscriptionStatus {
+  /// Creates a new instance of [SK2SubscriptionStatus].
+  const SK2SubscriptionStatus({required this.state, required this.renewalInfo});
+
+  /// The renewal state of the subscription.
+  final SK2RenewalState state;
+
+  /// The renewal information for the subscription.
+  final SK2RenewalInfo renewalInfo;
+}
+
+extension on SK2SubscriptionStatusMessage {
+  SK2SubscriptionStatus convertFromPigeon() {
+    return SK2SubscriptionStatus(
+      state: state.convertFromPigeon(),
+      renewalInfo: renewalInfo.convertFromPigeon(),
+    );
   }
 }
 

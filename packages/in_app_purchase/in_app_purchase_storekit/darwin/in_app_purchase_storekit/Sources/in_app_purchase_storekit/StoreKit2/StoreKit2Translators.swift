@@ -64,6 +64,49 @@ extension Product.SubscriptionInfo {
 }
 
 @available(iOS 15.0, macOS 12.0, *)
+extension Product.SubscriptionInfo.RenewalState {
+  var convertToPigeon: SK2RenewalStateMessage {
+    switch self {
+    case .subscribed:
+      return SK2RenewalStateMessage.subscribed
+    case .expired:
+      return SK2RenewalStateMessage.expired
+    case .inGracePeriod:
+      return SK2RenewalStateMessage.inGracePeriod
+    case .inBillingRetryPeriod:
+      return SK2RenewalStateMessage.inBillingRetryPeriod
+    case .revoked:
+      return SK2RenewalStateMessage.revoked
+    default:
+      fatalError("An unknown RenewalState was passed in")
+    }
+  }
+}
+
+@available(iOS 15.0, macOS 12.0, *)
+extension Product.SubscriptionInfo.RenewalInfo {
+  var convertToPigeon: SK2RenewalInfoMessage {
+    return SK2RenewalInfoMessage(
+      autoRenewPreference: autoRenewPreference,
+      willAutoRenew: willAutoRenew
+    )
+  }
+}
+
+@available(iOS 15.0, macOS 12.0, *)
+extension Product.SubscriptionInfo.Status {
+  var convertToPigeon: SK2SubscriptionStatusMessage? {
+    guard case .verified(let renewalInfo) = renewalInfo else {
+      return nil
+    }
+    return SK2SubscriptionStatusMessage(
+      state: state.convertToPigeon,
+      renewalInfo: renewalInfo.convertToPigeon
+    )
+  }
+}
+
+@available(iOS 15.0, macOS 12.0, *)
 extension Product.SubscriptionOffer {
   var convertToPigeon: SK2SubscriptionOfferMessage {
     return SK2SubscriptionOfferMessage(

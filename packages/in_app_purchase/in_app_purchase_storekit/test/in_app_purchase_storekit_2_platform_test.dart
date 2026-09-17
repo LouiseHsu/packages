@@ -750,4 +750,13 @@ void main() {
       expect(transactions.first.quantity, 2);
     });
   });
+
+  group('subscription renewal info', () {
+    test('SK2RenewalInfo contains autoRenewPreference and willAutoRenew', () {
+      final renewalInfo = SK2RenewalInfo(autoRenewPreference: 'basic_monthly', willAutoRenew: true);
+
+      expect(renewalInfo.autoRenewPreference, 'basic_monthly');
+      expect(renewalInfo.willAutoRenew, isTrue);
+    });
+  });
 }
