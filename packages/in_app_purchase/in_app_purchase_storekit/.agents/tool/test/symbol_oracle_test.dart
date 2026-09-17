@@ -54,6 +54,44 @@ List<Map<String, dynamic>> _fakeGraph() {
   ];
 }
 
+/// A deliberately unbalanced graph: one oversized type that sorts early, one
+/// tiny type that sorts late, and one type whose methods sort ahead of its
+/// cases.
+///
+/// This is the shape that broke in production. `Product` and `PurchaseError`
+/// sorted ahead of `RenewalState` and consumed the whole budget, and within
+/// `RenewalState` the conformance plumbing sorted ahead of `revoked` and
+/// `subscribed`.
+List<Map<String, dynamic>> _lopsidedGraph() {
+  Map<String, dynamic> sym(List<String> path, String kind, String decl) {
+    return <String, dynamic>{
+      'kind': <String, dynamic>{'identifier': kind},
+      'pathComponents': path,
+      'declarationFragments': <dynamic>[
+        <String, dynamic>{'spelling': decl},
+      ],
+    };
+  }
+
+  return <Map<String, dynamic>>[
+    sym(<String>['Wrapper'], 'swift.struct', 'struct Wrapper'),
+    sym(<String>['Wrapper', 'Alpha'], 'swift.struct', 'struct Alpha'),
+    sym(<String>['Wrapper', 'Zeta'], 'swift.struct', 'struct Zeta'),
+    for (int i = 0; i < 30; i++)
+      sym(
+        <String>['Wrapper', 'Alpha', 'm${i.toString().padLeft(2, '0')}'],
+        'swift.property',
+        'let m$i: Int',
+      ),
+    for (final String name in <String>['one', 'two', 'three'])
+      sym(<String>['Wrapper', 'Zeta', name], 'swift.type.property', 'static let $name: Zeta'),
+    sym(<String>['Holder'], 'swift.enum', 'enum Holder'),
+    sym(<String>['Holder', 'aMethod(_:)'], 'swift.method', 'func aMethod(Int)'),
+    sym(<String>['Holder', 'bMethod(_:)'], 'swift.method', 'func bMethod(Int)'),
+    sym(<String>['Holder', 'zCase'], 'swift.enum.case', 'case zCase'),
+  ];
+}
+
 void main() {
   group('extractIdentifiers', () {
     test('picks up camelCase and PascalCase but not ordinary prose', () {
@@ -111,6 +149,48 @@ void main() {
     test('returns nothing when no identifier matches', () {
       expect(selectSymbols(_fakeGraph(), <String>{'NoSuchType'}), isEmpty);
     });
+
+    test('spreads a tight budget across types instead of draining the first', () {
+      // Regression test for the bug this whole pass exists to fix. `Alpha` is
+      // huge and sorts first; `Zeta` is tiny and sorts last. A prefix cut gives
+      // every slot to `Alpha` and `Zeta` disappears -- which is exactly what
+      // happened to `RenewalState` behind `Product` and `PurchaseError`.
+      final List<Map<String, dynamic>> selected = selectSymbols(
+        _lopsidedGraph(),
+        <String>{'Wrapper'},
+        maxSymbols: 14,
+        // Deliberately not the default, so this pins the behaviour rather than
+        // tracking whatever the default is tuned to next.
+        maxPerType: 4,
+      );
+      final List<String> paths = selected
+          .map((Map<String, dynamic> s) => (s['pathComponents'] as List<dynamic>).join('.'))
+          .toList();
+
+      // The small type survives in full.
+      expect(paths, contains('Wrapper.Zeta.one'));
+      expect(paths, contains('Wrapper.Zeta.two'));
+      expect(paths, contains('Wrapper.Zeta.three'));
+
+      // The large type is throttled rather than allowed to take everything.
+      final int alphaCount = paths.where((String p) => p.startsWith('Wrapper.Alpha.')).length;
+      expect(alphaCount, lessThanOrEqualTo(4));
+    });
+
+    test('prefers case-like members over methods when a type is truncated', () {
+      // A partial case list is worse than none: it looks complete. So when a
+      // type cannot be shown in full, its cases must outrank its methods even
+      // though the methods sort earlier alphabetically.
+      final List<Map<String, dynamic>> selected = selectSymbols(_lopsidedGraph(), <String>{
+        'Holder',
+      }, maxPerType: 1);
+      final List<String> paths = selected
+          .map((Map<String, dynamic> s) => (s['pathComponents'] as List<dynamic>).join('.'))
+          .toList();
+
+      expect(paths, contains('Holder.zCase'));
+      expect(paths, isNot(contains('Holder.aMethod(_:)')));
+    });
   });
 
   group('formatSymbolBlock', () {
@@ -140,21 +220,40 @@ void main() {
 
   group('SymbolOracle end to end', () {
     test(
-      'resolves the real RenewalState cases from the installed SDK',
+      'supplies RenewalState cases for an issue that never names RenewalState',
       () async {
-        final oracle = SymbolOracle();
-        final String block = await oracle.lookupForIssue(
-          'Expose autoRenewPreference and willAutoRenew from RenewalState',
-        );
+        // The verbatim issue #7 title. It says "renewal info" and names two
+        // properties, but never mentions `RenewalState` -- the agent's use of
+        // that enum was its own implementation choice.
+        //
+        // The first version of this test spelled out "RenewalState", so it
+        // passed while the real run failed: the agent wrote `inBillingRetry`
+        // for a case actually called `inBillingRetryPeriod`, and the cases had
+        // been cut from the block entirely. Keep this wording verbatim.
+        const issue =
+            '[in_app_purchase_storekit] Expose StoreKit 2 subscription status '
+            'and renewal info (autoRenewPreference, willAutoRenew). '
+            'Product.SubscriptionInfo has a status(for:) lookup that yields a '
+            'RenewalInfo.';
 
-        // Guards the exact regression from the issue #7 run, where the agent
-        // emitted `RenewalState.inPadd`. Every real case must be present.
-        expect(block, contains('subscribed'));
-        expect(block, contains('expired'));
-        expect(block, contains('inBillingRetryPeriod'));
+        final String block = await SymbolOracle().lookupForIssue(issue);
+
+        expect(block, contains('autoRenewPreference'));
+        expect(block, contains('willAutoRenew'));
+
+        // The regression that actually bit us, twice.
+        expect(
+          block,
+          contains('inBillingRetryPeriod'),
+          reason: 'the agent invented `inBillingRetry`; the real case name must be present',
+        );
         expect(block, contains('inGracePeriod'));
+        expect(block, contains('subscribed'));
         expect(block, contains('revoked'));
-        expect(block, isNot(contains('inPadd')));
+
+        // Conformance boilerplate crowded out the useful symbols last time.
+        expect(block, isNot(contains('static func == ')));
+        expect(block, isNot(contains('hashValue')));
       },
       // Needs Xcode; extraction is slow the first time and cached after.
       skip: !Platform.isMacOS,
