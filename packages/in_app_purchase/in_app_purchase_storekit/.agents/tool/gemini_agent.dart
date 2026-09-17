@@ -691,13 +691,39 @@ GUIDELINES:
 - Provide your new test block in `test_code`. Return RAW code only without markdown code fences.
 ''';
 
-    final String contextSnippet;
-    final List<String> lines = existingContent.split('\n');
-    if (lines.length > 80) {
-      contextSnippet =
-          '// ... (earlier tests omitted for brevity) ...\n${lines.sublist(lines.length - 80).join('\n')}';
-    } else {
-      contextSnippet = existingContent;
+    // The whole test file, plus the fake it runs against.
+    //
+    // This used to be a tail snippet of the last 80 lines. The file is 753
+    // lines, and the `InAppPurchaseStoreKitPlatform.enableStoreKit2()` calls
+    // that every StoreKit 2 test group depends on sit at lines 486 and 601 --
+    // outside that window. So on the issue #7 run the agent wrote a StoreKit 2
+    // test that never enabled StoreKit 2. No correct implementation could
+    // satisfy it: the platform guards those APIs and throws
+    // `storekit2_not_enabled`.
+    //
+    // That test still failed on clean code, so it passed the FAIL_TO_PASS gate
+    // and was pinned to stop a fix weakening its own judge -- and then poisoned
+    // three implementation attempts against an impossible target. A test
+    // generator that cannot see the conventions of the file it is appending to
+    // will keep producing tests that are plausible and unsatisfiable.
+    //
+    // The fake is included for the same reason: the guidelines above tell the
+    // agent that `fakeStoreKit2Platform` supplies mock responses, while never
+    // showing it what those responses are.
+    //
+    // Size is not a concern. Run 4 grew the implementation prompt 55% and ran
+    // faster; this prompt is a fraction of that one.
+    final contextBuffer = StringBuffer()
+      ..writeln('=== FILE: $relativeTestFile ===')
+      ..writeln(existingContent);
+
+    const fakePath = 'test/fakes/fake_storekit_platform.dart';
+    final fakeFile = File('$packageDir/$fakePath');
+    if (fakeFile.existsSync()) {
+      contextBuffer
+        ..writeln()
+        ..writeln('=== FILE: $fakePath ===')
+        ..writeln(fakeFile.readAsStringSync());
     }
 
     final prompt =
@@ -710,8 +736,11 @@ PREVIOUS TEST INVARIANT FAILURE (if any):
 ${context.lastTestFailureSummary ?? 'None'}
 
 TARGET TEST FILE: $relativeTestFile
-EXISTING TESTS (tail snippet):
-$contextSnippet
+Your new test block is appended to this file, so it inherits its imports and
+top-level setup. Match how the existing tests in it are written.
+
+EXISTING TEST FILE AND FAKES:
+$contextBuffer
 ''';
 
     final Map<String, dynamic> response = await _callGemini(
