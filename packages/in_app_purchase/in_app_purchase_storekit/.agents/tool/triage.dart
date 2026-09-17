@@ -209,7 +209,13 @@ Calibrated scoring reference (0-10):
       headers.forEach((String key, String value) {
         request.headers.set(key, value);
       });
-      request.write(jsonEncode(requestBody));
+      // `request.write(String)` encodes with `request.encoding`, which defaults
+      // to latin-1. A GitHub issue is arbitrary user text, so anything outside
+      // that range -- an em dash, a curly quote, an emoji, an accented name,
+      // any CJK -- throws `Invalid argument (string): Contains invalid
+      // characters` before the request is even sent. Encoding to UTF-8 bytes
+      // explicitly sidesteps the encoding attached to the request.
+      request.add(utf8.encode(jsonEncode(requestBody)));
 
       final HttpClientResponse response = await request.close();
       final String responseText = await response.transform(utf8.decoder).join();
@@ -264,7 +270,12 @@ Calibrated scoring reference (0-10):
       return TriageVerdict.fromJson(verdictMap);
     }
   } finally {
-    httpClient.close();
+    // `force: true` because a plain `close()` only stops new connections and
+    // waits for existing ones to drain. If the body threw part-way through
+    // being written, that socket never completes, and the process sits there
+    // holding the event loop open long after the error has been reported --
+    // observed as an 11 minute CI step for a failure printed 17 seconds in.
+    httpClient.close(force: true);
   }
 }
 

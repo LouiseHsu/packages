@@ -75,18 +75,20 @@ void main() {
   group('Tier 2: Network behaviour', () {
     late HttpServer server;
     late List<HttpRequest> received;
+    late List<String> receivedBodies;
     late List<int> responseCodes;
 
     /// Serves [responseCodes] in order, returning a valid verdict body for 200s.
     Future<void> startServer(List<int> codes) async {
       responseCodes = codes;
       received = <HttpRequest>[];
+      receivedBodies = <String>[];
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       var index = 0;
       unawaited(() async {
         await for (final HttpRequest request in server) {
           received.add(request);
-          await utf8.decoder.bind(request).join();
+          receivedBodies.add(await utf8.decoder.bind(request).join());
           final int code = index < responseCodes.length ? responseCodes[index] : responseCodes.last;
           index++;
           request.response.statusCode = code;
@@ -137,6 +139,38 @@ void main() {
       // HttpException.toString(), and from there into logs and public CI output.
       expect(received.single.uri.toString(), isNot(contains('SUPER_SECRET_KEY')));
       expect(received.single.headers.value('x-goog-api-key'), 'SUPER_SECRET_KEY');
+    });
+
+    test('sends non-Latin-1 issue text without throwing', () async {
+      await startServer(<int>[200]);
+
+      // A real issue took CI down with exactly this. `HttpClientRequest.write`
+      // encodes using the request's encoding, which defaults to latin-1, so an
+      // em dash threw `Invalid argument (string): Contains invalid characters`
+      // before anything was sent. GitHub issues are arbitrary user text: em
+      // dashes, curly quotes, emoji and non-Latin scripts are all routine.
+      const title = 'Can\u2019t tell if a transaction was refunded \u2014 SK2';
+      const body =
+          'Filed by Ren\u00e9e \u2014 \u201Crevoked\u201D purchases look valid. '
+          '\u8FD4\u91D1 \u{1F4B8}';
+
+      final TriageVerdict verdict = await evaluateWithGemini(
+        title: title,
+        body: body,
+        issueNumber: 6,
+        apiKey: 'k',
+        endpointOverride: Uri.parse('http://${server.address.host}:${server.port}/'),
+      );
+
+      expect(verdict.suitabilityScore, 9);
+
+      // Decoded as UTF-8 on the far end, so the characters must survive intact
+      // rather than arriving mangled or replaced.
+      final String sent = receivedBodies.single;
+      expect(sent, contains('\u2014'));
+      expect(sent, contains('Ren\u00e9e'));
+      expect(sent, contains('\u8FD4\u91D1'));
+      expect(sent, contains('\u{1F4B8}'));
     });
 
     test('retries a 503 on the same model instead of giving up', () async {

@@ -544,7 +544,11 @@ class GeminiHarnessAgent implements HarnessAgent {
           headers.forEach((String key, String value) {
             request.headers.set(key, value);
           });
-          request.write(jsonEncode(requestBody));
+          // See the matching comment in triage.dart: `write(String)` encodes as
+          // latin-1. This prompt embeds both the issue text and package source,
+          // so a single non-Latin-1 character anywhere in either would throw
+          // before the request was sent.
+          request.add(utf8.encode(jsonEncode(requestBody)));
 
           final HttpClientResponse response = await request.close();
           final String responseText = await response.transform(utf8.decoder).join();
@@ -620,7 +624,10 @@ class GeminiHarnessAgent implements HarnessAgent {
 
       throw StateError('Gemini API call failed after network attempts across candidate models.');
     } finally {
-      httpClient.close();
+      // See triage.dart: a plain `close()` waits on a socket that a failed
+      // body write left half-open. Here it would stall once per attempt, so
+      // the harness could burn its whole job timeout doing nothing.
+      httpClient.close(force: true);
     }
   }
 
