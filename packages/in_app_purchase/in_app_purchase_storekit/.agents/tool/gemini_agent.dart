@@ -740,30 +740,69 @@ $contextSnippet
   Future<ImplementationFix> generateFix(HarnessContext context) async {
     final String packageDir = context.resolvePackagePath();
 
-    // Ordered roughly as the agent must edit them: IDL, native API surface,
-    // native translators, Dart wrapper, fakes.
+    // The package's entire hand-written StoreKit 2 surface, ordered roughly as
+    // the agent must edit it: IDL, native, Dart wrappers, public types, exports,
+    // platform implementation, test fakes.
     //
-    // `InAppPurchasePlugin+StoreKit2.swift` is not optional. It holds
-    // `extension InAppPurchasePlugin: InAppPurchase2API`, so adding a method to
-    // the `@HostApi()` class in the IDL makes the Swift build fail on protocol
-    // conformance until that extension implements it. An agent that cannot see
-    // the file cannot satisfy the compiler, and the Swift gate fails every
-    // attempt for a reason it has no way to act on.
+    // This used to be six hand-picked files, and the picking was the problem.
+    // It was chosen for issue #3 and never revisited, so every issue got the
+    // same guess no matter what it asked for. Two runs were then lost to files
+    // that were simply absent: `sk2_product_wrapper.dart` in one, and
+    // `in_app_purchase_storekit.dart` -- a seven line export file -- in the
+    // next, where the agent correctly deduced it had to export a new type
+    // there, guessed at the contents, and had its edit rejected.
     //
-    // It also carries the only worked examples of unwrapping
-    // `VerificationResult<T>` and of the completion-handler style Pigeon
-    // generates for `@async` methods -- neither appears in the translators.
+    // Sending everything is possible because the surface is small: 3,729 lines
+    // in total against the 2,231 the six files already cost. There is no
+    // selection problem here worth solving, and a ranking heuristic would be
+    // machinery whose only job is to occasionally omit something needed.
     //
-    // Both wrappers are listed because subscription data hangs off Product
-    // while purchase data hangs off Transaction. On the issue #7 run the agent
-    // spent two of its five attempts trying to patch `sk2_product_wrapper.dart`
-    // sight unseen, and both edits failed with "search_block not found".
+    // StoreKit 1 (`store_kit_wrappers/`, `pigeons/messages.dart`) is left out
+    // deliberately: it is deprecated and StoreKit 2 is the default framework,
+    // so those files would be context the agent never needs.
+    //
+    // Generated files (`*.g.dart`, `*.g.swift`) are also left out. Pigeon owns
+    // them, a guardrail rejects any attempt to hand-edit one, and omitting them
+    // makes that mistake harder to make in the first place.
     final candidateFiles = <String>[
+      // Pigeon IDL: the source of truth for the platform interface.
       'pigeons/sk2_pigeon.dart',
+
+      // Native. `InAppPurchasePlugin+StoreKit2.swift` holds
+      // `extension InAppPurchasePlugin: InAppPurchase2API`, so adding a method
+      // to the `@HostApi()` class makes the Swift build fail on protocol
+      // conformance until that extension implements it. It also carries the
+      // only worked examples of unwrapping `VerificationResult<T>` and of the
+      // completion-handler style Pigeon generates for `@async` methods.
+      'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/InAppPurchasePlugin.swift',
       'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/InAppPurchasePlugin+StoreKit2.swift',
       'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/StoreKit2Translators.swift',
+
+      // Dart wrappers over the generated messages.
+      'lib/src/store_kit_2_wrappers/sk2_appstore_wrapper.dart',
       'lib/src/store_kit_2_wrappers/sk2_product_wrapper.dart',
+      'lib/src/store_kit_2_wrappers/sk2_storefront_wrapper.dart',
       'lib/src/store_kit_2_wrappers/sk2_transaction_wrapper.dart',
+
+      // Public types returned to package consumers.
+      'lib/src/types/types.dart',
+      'lib/src/types/app_store_product_details.dart',
+      'lib/src/types/app_store_purchase_details.dart',
+      'lib/src/types/app_store_purchase_param.dart',
+      'lib/src/types/sk2_promotional_offer.dart',
+      'lib/src/types/sk2_purchase_param.dart',
+
+      // Export barrels. Tiny, and a new public type is invisible without them.
+      'lib/in_app_purchase_storekit.dart',
+      'lib/store_kit_2_wrappers.dart',
+
+      // Platform implementation: where most behaviour actually lives.
+      'lib/src/in_app_purchase_apis.dart',
+      'lib/src/in_app_purchase_storekit_platform.dart',
+      'lib/src/in_app_purchase_storekit_platform_addition.dart',
+
+      // Test fakes. Any method added to the `@HostApi()` class must also be
+      // implemented here, or the package's tests fail to compile.
       'test/fakes/fake_storekit_platform.dart',
     ];
 

@@ -368,7 +368,7 @@ any work of your own are sitting in the same dirty tree.
 | [`guardrails.dart`](tool/guardrails.dart) | Diff-level invariant checks |
 | [`workspace.dart`](tool/workspace.dart) | Reverting the tree between attempts, excluding `.agents/` |
 | [`publisher.dart`](tool/publisher.dart) | Branch, commit, push, and Draft PR creation |
-| [`playbook.md`](playbook.md) | The domain procedure the agent follows for StoreKit work |
+| [`playbook.md`](playbook.md) | Harness design and the rationale behind it — read this before changing the harness |
 
 Each side-effecting concern is behind an interface with a default
 implementation, so the harness can be driven end-to-end in tests with no
