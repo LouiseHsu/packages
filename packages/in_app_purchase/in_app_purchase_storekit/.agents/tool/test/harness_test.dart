@@ -1840,6 +1840,142 @@ void main() {
       expect(context.logs, contains(contains('Failure logs saved to:')));
     });
   });
+
+  group('Skeleton edit destinations', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('skeleton_edits_');
+      Directory('${tempDir.path}/lib/src').createSync(recursive: true);
+      File('${tempDir.path}/lib/src/wrapper.dart').writeAsStringSync('class Wrapper {}\n');
+      Directory('${tempDir.path}/test').createSync(recursive: true);
+      File('${tempDir.path}/test/package_test.dart').writeAsStringSync('void main() {}\n');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    test('accepts edits against production files', () {
+      expect(
+        () => validateSkeletonEdits(
+          edits: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'file_path': 'lib/src/wrapper.dart',
+              'search_block': 'class Wrapper {}',
+              'replace_block': 'class Wrapper {}',
+            },
+          ],
+          packageDir: tempDir.path,
+          testFilePath: 'test/package_test.dart',
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('rejects an edit aimed at the test file, and says why', () {
+      expect(
+        () => validateSkeletonEdits(
+          edits: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'file_path': 'test/package_test.dart',
+              'search_block': 'void main() {}',
+              'replace_block': 'class Wrapper {}\nvoid main() {}',
+            },
+          ],
+          packageDir: tempDir.path,
+          testFilePath: 'test/package_test.dart',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (StateError e) => e.message,
+            'message',
+            allOf(
+              contains('targeted the test file'),
+              // The message is fed back to the model verbatim, so it has to
+              // name the destination. Run 7 spent four attempts failing because
+              // the only feedback available was "did not compile".
+              contains('lib/'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('rejects an edit against a file that does not exist', () {
+      expect(
+        () => validateSkeletonEdits(
+          edits: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'file_path': 'lib/src/imaginary.dart',
+              'search_block': 'x',
+              'replace_block': 'y',
+            },
+          ],
+          packageDir: tempDir.path,
+          testFilePath: 'test/package_test.dart',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (StateError e) => e.message,
+            'message',
+            contains('File not found for skeleton stub'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects the whole batch before applying any of it', () {
+      // A good edit ahead of a bad one must not reach the filesystem. The
+      // harness only restores files it has snapshotted, so a partial apply
+      // would leak into the next attempt.
+      expect(
+        () => validateSkeletonEdits(
+          edits: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'file_path': 'lib/src/wrapper.dart',
+              'search_block': 'class Wrapper {}',
+              'replace_block': 'class Wrapper { int? x; }',
+            },
+            <String, dynamic>{
+              'file_path': 'test/package_test.dart',
+              'search_block': 'void main() {}',
+              'replace_block': 'void main() {}',
+            },
+          ],
+          packageDir: tempDir.path,
+          testFilePath: 'test/package_test.dart',
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(File('${tempDir.path}/lib/src/wrapper.dart').readAsStringSync(), 'class Wrapper {}\n');
+    });
+  });
+
+  group('Shared source context', () {
+    test('the red test and implementation phases read the same files', () {
+      // Both phases call readSurfaceFiles. The red test phase emits
+      // search/replace edits against these files, so if the two lists ever
+      // diverge it can be asked to edit a file it was never shown -- which is
+      // exactly how run 7 failed.
+      expect(storeKit2SurfaceFiles, contains('pigeons/sk2_pigeon.dart'));
+      expect(storeKit2SurfaceFiles, contains('test/fakes/fake_storekit_platform.dart'));
+      expect(
+        storeKit2SurfaceFiles.where((String p) => p.endsWith('.g.dart')),
+        isEmpty,
+        reason: 'Pigeon owns generated files and a guardrail rejects hand edits to them.',
+      );
+    });
+
+    test('skips files that are not present', () {
+      final Directory tempDir = Directory.systemTemp.createTempSync('surface_files_');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+
+      expect(readSurfaceFiles(tempDir.path), isEmpty);
+    });
+  });
 }
 
 class MockTestRunner implements TestRunner {

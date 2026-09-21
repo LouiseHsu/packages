@@ -145,6 +145,38 @@ The verified failure output is kept. It is the evidence the bug was real, and
 the only way a reviewer can confirm the test failed *for the right reason*
 rather than by coincidence.
 
+#### You can only edit a file you have been shown
+
+The skeleton is a set of search/replace edits against **production** files. When
+the gate first shipped, the red-test prompt contained only the test file and the
+fake — the exact context a test writer needs, and not enough for the second job
+the same call had just been given.
+
+The result was not a subtle degradation. Run 7 failed all four attempts, every
+one rejected as "did not compile", because the model put the declarations in the
+test file each time. It was the only file it could quote a `search_block` from.
+Declaring `SK2SubscriptionInfo` next to the test that imports the real one is a
+duplicate definition, so the file stopped compiling — and the rejection message
+said exactly that, which was true and useless. Nothing told it the *destination*
+was wrong.
+
+> [!NOTE]
+> The run before it had passed this phase. It guessed `sk2_product_wrapper.dart`
+> correctly on one attempt, which looked like the gate working. One sample of a
+> 1-in-N guess is indistinguishable from competence; four samples are not.
+
+Two rules came out of this, and both generalise past this package:
+
+- **A phase may only be asked to edit files present in its own prompt.** Both
+  calls now build context from one shared `readSurfaceFiles()`, so the two
+  cannot drift apart again. The cost is ~39k tokens, about 4% of the window.
+- **Reject with the reason you actually have.** `validateSkeletonEdits()` checks
+  destinations before applying anything and names the correct one in the error.
+  A rejection message is the model's only feedback channel; if it describes a
+  downstream symptom, the next attempt repeats the mistake. Validating up front
+  also means a bad edge case can't leave earlier edits half-applied.
+
+
 ### Phase 2 — implementation, gated in a deliberate order
 
 Each attempt runs five gates. The order is chosen so the cheapest and most

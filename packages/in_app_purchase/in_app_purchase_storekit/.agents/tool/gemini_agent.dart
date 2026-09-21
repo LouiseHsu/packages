@@ -364,6 +364,129 @@ String buildFixPrompt(
   return buffer.toString();
 }
 
+/// The package's entire hand-written StoreKit 2 surface, ordered roughly as the
+/// agent must edit it: IDL, native, Dart wrappers, public types, exports,
+/// platform implementation, test fakes.
+///
+/// This used to be six hand-picked files, and the picking was the problem. It
+/// was chosen for issue #3 and never revisited, so every issue got the same
+/// guess no matter what it asked for. Two runs were then lost to files that
+/// were simply absent: `sk2_product_wrapper.dart` in one, and
+/// `in_app_purchase_storekit.dart` -- a seven line export file -- in the next,
+/// where the agent correctly deduced it had to export a new type there, guessed
+/// at the contents, and had its edit rejected.
+///
+/// Sending everything is possible because the surface is small: 3,729 lines in
+/// total against the 2,231 the six files already cost. There is no selection
+/// problem here worth solving, and a ranking heuristic would be machinery whose
+/// only job is to occasionally omit something needed.
+///
+/// StoreKit 1 (`store_kit_wrappers/`, `pigeons/messages.dart`) is left out
+/// deliberately: it is deprecated and StoreKit 2 is the default framework, so
+/// those files would be context the agent never needs.
+///
+/// Generated files (`*.g.dart`, `*.g.swift`) are also left out. Pigeon owns
+/// them, a guardrail rejects any attempt to hand-edit one, and omitting them
+/// makes that mistake harder to make in the first place.
+const List<String> storeKit2SurfaceFiles = <String>[
+  // Pigeon IDL: the source of truth for the platform interface.
+  'pigeons/sk2_pigeon.dart',
+
+  // Native. `InAppPurchasePlugin+StoreKit2.swift` holds
+  // `extension InAppPurchasePlugin: InAppPurchase2API`, so adding a method to
+  // the `@HostApi()` class makes the Swift build fail on protocol conformance
+  // until that extension implements it. It also carries the only worked
+  // examples of unwrapping `VerificationResult<T>` and of the
+  // completion-handler style Pigeon generates for `@async` methods.
+  'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/InAppPurchasePlugin.swift',
+  'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/InAppPurchasePlugin+StoreKit2.swift',
+  'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/StoreKit2Translators.swift',
+
+  // Dart wrappers over the generated messages.
+  'lib/src/store_kit_2_wrappers/sk2_appstore_wrapper.dart',
+  'lib/src/store_kit_2_wrappers/sk2_product_wrapper.dart',
+  'lib/src/store_kit_2_wrappers/sk2_storefront_wrapper.dart',
+  'lib/src/store_kit_2_wrappers/sk2_transaction_wrapper.dart',
+
+  // Public types returned to package consumers.
+  'lib/src/types/types.dart',
+  'lib/src/types/app_store_product_details.dart',
+  'lib/src/types/app_store_purchase_details.dart',
+  'lib/src/types/app_store_purchase_param.dart',
+  'lib/src/types/sk2_promotional_offer.dart',
+  'lib/src/types/sk2_purchase_param.dart',
+
+  // Export barrels. Tiny, and a new public type is invisible without them.
+  'lib/in_app_purchase_storekit.dart',
+  'lib/store_kit_2_wrappers.dart',
+
+  // Platform implementation: where most behaviour actually lives.
+  'lib/src/in_app_purchase_apis.dart',
+  'lib/src/in_app_purchase_storekit_platform.dart',
+  'lib/src/in_app_purchase_storekit_platform_addition.dart',
+
+  // Test fakes. Any method added to the `@HostApi()` class must also be
+  // implemented here, or the package's tests fail to compile.
+  'test/fakes/fake_storekit_platform.dart',
+];
+
+/// Reads every file in [storeKit2SurfaceFiles] that exists under [packageDir]
+/// into one `=== FILE: path ===` delimited block.
+///
+/// Both model calls use this. The red test phase needs it because it emits
+/// search/replace edits against these files, and a `search_block` can only be
+/// written by copying from a file you have been shown.
+String readSurfaceFiles(String packageDir) {
+  final buffer = StringBuffer();
+  for (final String relPath in storeKit2SurfaceFiles) {
+    final file = File('$packageDir/$relPath');
+    if (file.existsSync()) {
+      buffer.writeln('=== FILE: $relPath ===');
+      buffer.writeln(file.readAsStringSync());
+      buffer.writeln();
+    }
+  }
+  return buffer.toString();
+}
+
+/// Checks every skeleton edit before any of them is applied.
+///
+/// Throws a [StateError] whose message is fed straight back to the model as the
+/// reason its attempt was rejected, so it is written to be read by the model.
+///
+/// Run 7 failed 4 attempts out of 4 with the skeleton written into the test file
+/// itself. Declaring `class SK2SubscriptionInfo` next to the test that imports
+/// the real one is a duplicate definition, so the file stopped compiling and the
+/// attempt was rejected for "did not compile" -- an accurate message about the
+/// wrong problem. Nothing in that feedback said the mistake was the destination
+/// rather than the contents of the stub, so the next attempt repeated it.
+///
+/// Checking up front also keeps the workspace clean: a throw halfway through the
+/// apply loop would leave every file before it mutated.
+void validateSkeletonEdits({
+  required List<Map<String, dynamic>> edits,
+  required String packageDir,
+  required String testFilePath,
+}) {
+  for (final edit in edits) {
+    final path = edit['file_path'] as String;
+    if (path == testFilePath) {
+      throw StateError(
+        'Skeleton edit targeted the test file ($path). The skeleton declares the '
+        'PRODUCTION API your test calls, so it belongs in the files under lib/, '
+        'pigeons/ or darwin/ that were shown to you. Declaring those types in the '
+        'test file duplicates the real ones and stops the file compiling. Test code '
+        'goes in `test_code`; declarations go in `skeleton`.',
+      );
+    }
+    if (!File('$packageDir/$path').existsSync()) {
+      throw StateError(
+        'File not found for skeleton stub: $path. Only edit files that were shown to you.',
+      );
+    }
+  }
+}
+
 /// Default AI agent using the Gemini API with structured JSON output.
 class GeminiHarnessAgent implements HarnessAgent {
   /// Creates a [GeminiHarnessAgent].
@@ -718,6 +841,15 @@ You therefore return two things:
    Add the classes, fields and method signatures the test names. EVERY method body must be
    exactly `throw UnimplementedError();`. Do NOT implement the feature.
 
+WHERE THE SKELETON GOES:
+Each `skeleton` entry is a search/replace edit against a PRODUCTION file -- something under
+`lib/`, `pigeons/` or `darwin/`, or the fake under `test/fakes/`. The full source of those
+files is in the prompt below. `search_block` must be copied verbatim from one of them, 1 to
+2 lines, and is usually just the line you want to insert after.
+NEVER put the skeleton in the test file. The test imports the real types, so declaring them
+again beside it is a duplicate definition and the file stops compiling. Edits to the test
+file are rejected outright.
+
 The test will then be run against your skeleton, and it must FAIL at runtime.
 - If it fails to compile, your skeleton is incomplete and the attempt is rejected.
 - If it PASSES, your test asserts nothing that the missing feature controls, and the attempt
@@ -734,10 +866,10 @@ GUIDELINES:
 - Return RAW code only, without markdown code fences.
 ''';
 
-    // The whole test file, plus the fake it runs against.
+    // The whole test file, plus the package's hand-written StoreKit 2 surface.
     //
-    // This used to be a tail snippet of the last 80 lines. The file is 753
-    // lines, and the `InAppPurchaseStoreKitPlatform.enableStoreKit2()` calls
+    // The test file used to be a tail snippet of the last 80 lines. The file is
+    // 753 lines, and the `InAppPurchaseStoreKitPlatform.enableStoreKit2()` calls
     // that every StoreKit 2 test group depends on sit at lines 486 and 601 --
     // outside that window. So on the issue #7 run the agent wrote a StoreKit 2
     // test that never enabled StoreKit 2. No correct implementation could
@@ -750,24 +882,24 @@ GUIDELINES:
     // generator that cannot see the conventions of the file it is appending to
     // will keep producing tests that are plausible and unsatisfiable.
     //
-    // The fake is included for the same reason: the guidelines above tell the
-    // agent that `fakeStoreKit2Platform` supplies mock responses, while never
-    // showing it what those responses are.
+    // The production surface is here because this call also returns a
+    // `skeleton`: search/replace edits against the real files. Run 7 failed all
+    // four attempts by putting those declarations in the test file, which is
+    // the only file it had ever been shown -- it could not write a `search_block`
+    // that matched anything else. Run 6 got this right once by guessing
+    // `sk2_product_wrapper.dart`, which read as competence and was luck.
+    //
+    // This is the same list `generateFix` sends, so the two phases agree on what
+    // the package looks like and on which files are fair game to edit.
     //
     // Size is not a concern. Run 4 grew the implementation prompt 55% and ran
-    // faster; this prompt is a fraction of that one.
+    // faster: roughly 85% of pipeline time is output generation, and input
+    // tokens are prefill. This prompt is now about the size of that one.
     final contextBuffer = StringBuffer()
       ..writeln('=== FILE: $relativeTestFile ===')
-      ..writeln(existingContent);
-
-    const fakePath = 'test/fakes/fake_storekit_platform.dart';
-    final fakeFile = File('$packageDir/$fakePath');
-    if (fakeFile.existsSync()) {
-      contextBuffer
-        ..writeln()
-        ..writeln('=== FILE: $fakePath ===')
-        ..writeln(fakeFile.readAsStringSync());
-    }
+      ..writeln(existingContent)
+      ..writeln()
+      ..write(readSurfaceFiles(packageDir));
 
     final prompt =
         '''
@@ -782,7 +914,10 @@ TARGET TEST FILE: $relativeTestFile
 Your new test block is appended to this file, so it inherits its imports and
 top-level setup. Match how the existing tests in it are written.
 
-EXISTING TEST FILE AND FAKES:
+Every other file below is a production or fake file you may target with a
+`skeleton` edit. Copy `search_block` text verbatim from one of them.
+
+TEST FILE, THEN THE PACKAGE SOURCE:
 $contextBuffer
 ''';
 
@@ -812,19 +947,25 @@ $contextBuffer
     // harness undoes it once the verdict is in and implementation starts from
     // clean code.
     final List<dynamic> rawSkeleton = response['skeleton'] as List<dynamic>? ?? <dynamic>[];
+    final skeletonEdits = <Map<String, dynamic>>[
+      for (final raw in rawSkeleton) raw as Map<String, dynamic>,
+    ];
+
+    validateSkeletonEdits(
+      edits: skeletonEdits,
+      packageDir: packageDir,
+      testFilePath: relativeTestFile,
+    );
+
     final skeletonLog = StringBuffer();
     context.skeletonOriginals.clear();
 
-    for (final raw in rawSkeleton) {
-      final editMap = raw as Map<String, dynamic>;
-      final path = editMap['file_path'] as String;
-      final searchBlock = editMap['search_block'] as String;
-      final replaceBlock = editMap['replace_block'] as String;
+    for (final edit in skeletonEdits) {
+      final path = edit['file_path'] as String;
+      final searchBlock = edit['search_block'] as String;
+      final replaceBlock = edit['replace_block'] as String;
 
       final file = File('$packageDir/$path');
-      if (!file.existsSync()) {
-        throw StateError('File not found for skeleton stub: $path');
-      }
       final String currentContent = file.readAsStringSync();
       // Only the first edit to a file captures the pristine copy.
       context.skeletonOriginals.putIfAbsent(path, () => currentContent);
@@ -851,81 +992,7 @@ $contextBuffer
   Future<ImplementationFix> generateFix(HarnessContext context) async {
     final String packageDir = context.resolvePackagePath();
 
-    // The package's entire hand-written StoreKit 2 surface, ordered roughly as
-    // the agent must edit it: IDL, native, Dart wrappers, public types, exports,
-    // platform implementation, test fakes.
-    //
-    // This used to be six hand-picked files, and the picking was the problem.
-    // It was chosen for issue #3 and never revisited, so every issue got the
-    // same guess no matter what it asked for. Two runs were then lost to files
-    // that were simply absent: `sk2_product_wrapper.dart` in one, and
-    // `in_app_purchase_storekit.dart` -- a seven line export file -- in the
-    // next, where the agent correctly deduced it had to export a new type
-    // there, guessed at the contents, and had its edit rejected.
-    //
-    // Sending everything is possible because the surface is small: 3,729 lines
-    // in total against the 2,231 the six files already cost. There is no
-    // selection problem here worth solving, and a ranking heuristic would be
-    // machinery whose only job is to occasionally omit something needed.
-    //
-    // StoreKit 1 (`store_kit_wrappers/`, `pigeons/messages.dart`) is left out
-    // deliberately: it is deprecated and StoreKit 2 is the default framework,
-    // so those files would be context the agent never needs.
-    //
-    // Generated files (`*.g.dart`, `*.g.swift`) are also left out. Pigeon owns
-    // them, a guardrail rejects any attempt to hand-edit one, and omitting them
-    // makes that mistake harder to make in the first place.
-    final candidateFiles = <String>[
-      // Pigeon IDL: the source of truth for the platform interface.
-      'pigeons/sk2_pigeon.dart',
-
-      // Native. `InAppPurchasePlugin+StoreKit2.swift` holds
-      // `extension InAppPurchasePlugin: InAppPurchase2API`, so adding a method
-      // to the `@HostApi()` class makes the Swift build fail on protocol
-      // conformance until that extension implements it. It also carries the
-      // only worked examples of unwrapping `VerificationResult<T>` and of the
-      // completion-handler style Pigeon generates for `@async` methods.
-      'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/InAppPurchasePlugin.swift',
-      'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/InAppPurchasePlugin+StoreKit2.swift',
-      'darwin/in_app_purchase_storekit/Sources/in_app_purchase_storekit/StoreKit2/StoreKit2Translators.swift',
-
-      // Dart wrappers over the generated messages.
-      'lib/src/store_kit_2_wrappers/sk2_appstore_wrapper.dart',
-      'lib/src/store_kit_2_wrappers/sk2_product_wrapper.dart',
-      'lib/src/store_kit_2_wrappers/sk2_storefront_wrapper.dart',
-      'lib/src/store_kit_2_wrappers/sk2_transaction_wrapper.dart',
-
-      // Public types returned to package consumers.
-      'lib/src/types/types.dart',
-      'lib/src/types/app_store_product_details.dart',
-      'lib/src/types/app_store_purchase_details.dart',
-      'lib/src/types/app_store_purchase_param.dart',
-      'lib/src/types/sk2_promotional_offer.dart',
-      'lib/src/types/sk2_purchase_param.dart',
-
-      // Export barrels. Tiny, and a new public type is invisible without them.
-      'lib/in_app_purchase_storekit.dart',
-      'lib/store_kit_2_wrappers.dart',
-
-      // Platform implementation: where most behaviour actually lives.
-      'lib/src/in_app_purchase_apis.dart',
-      'lib/src/in_app_purchase_storekit_platform.dart',
-      'lib/src/in_app_purchase_storekit_platform_addition.dart',
-
-      // Test fakes. Any method added to the `@HostApi()` class must also be
-      // implemented here, or the package's tests fail to compile.
-      'test/fakes/fake_storekit_platform.dart',
-    ];
-
-    final fileContextBuffer = StringBuffer();
-    for (final relPath in candidateFiles) {
-      final file = File('$packageDir/$relPath');
-      if (file.existsSync()) {
-        fileContextBuffer.writeln('=== FILE: $relPath ===');
-        fileContextBuffer.writeln(file.readAsStringSync());
-        fileContextBuffer.writeln();
-      }
-    }
+    final String fileContext = readSurfaceFiles(packageDir);
 
     final systemInstruction =
         '''
@@ -990,11 +1057,7 @@ STRICT INVARIANTS:
       '${context.issueTitle} ${context.issueBody}',
     );
 
-    final String prompt = buildFixPrompt(
-      context,
-      fileContext: fileContextBuffer.toString(),
-      sdkSymbols: sdkSymbols,
-    );
+    final String prompt = buildFixPrompt(context, fileContext: fileContext, sdkSymbols: sdkSymbols);
 
     final Map<String, dynamic> response = await _callGemini(
       prompt: prompt,
