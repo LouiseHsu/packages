@@ -34,6 +34,41 @@ bool isCompileFailure(String testOutput) {
   return markers.any(testOutput.contains);
 }
 
+/// Pulls `note:` lines out of [compilerOutput] into a REQUIRED CHANGES block.
+///
+/// Compilers frequently state the remedy rather than just the problem, but
+/// they state it *after* the error, several lines into a wall of source
+/// context. Repeating those lines at the top costs nothing and makes the
+/// instruction impossible to skim past.
+///
+/// Returns the empty string when there are no notes, so callers can splice it
+/// in unconditionally.
+String hoistCompilerDirectives(String compilerOutput) {
+  final directives = <String>{};
+  for (final String line in compilerOutput.split('\n')) {
+    final int noteIndex = line.indexOf('note: ');
+    if (noteIndex == -1) {
+      continue;
+    }
+    final String note = line.substring(noteIndex + 'note: '.length).trim();
+    if (note.isNotEmpty) {
+      directives.add(note);
+    }
+  }
+  if (directives.isEmpty) {
+    return '';
+  }
+  final buffer = StringBuffer(
+    'REQUIRED CHANGES (the compiler told you exactly what to do -- do this, '
+    'do not repeat the previous attempt):\n',
+  );
+  for (final directive in directives) {
+    buffer.writeln('  * $directive');
+  }
+  buffer.writeln();
+  return buffer.toString();
+}
+
 /// The deterministic controller that steps through each harness phase.
 class PackageHarness {
   /// Creates a [PackageHarness] with an optional [testRunner], [validator], [codeGenerator], [nativeAnalyzer], [workspace], and [agent].
@@ -586,8 +621,15 @@ class PackageHarness {
         context.log('Native analysis skipped: ${nativeResult.skippedReason}');
         context.state.nativeAnalysisSkippedReason = nativeResult.skippedReason;
       } else if (!nativeResult.success) {
+        // swiftc usually says exactly how to fix it, in a `note:` line buried
+        // several lines below the error. In run 6 the note read "remove
+        // '@unknown' to handle remaining values", the whole summary was fed
+        // back verbatim, and the next attempt made the identical mistake.
+        // Hoisting the notes puts the compiler's own instruction first.
+        final String directives = hoistCompilerDirectives(nativeResult.failureSummary);
         lastFailureReason =
             'Native analysis failed (exit code ${nativeResult.exitCode}):\n'
+            '$directives'
             '${nativeResult.failureSummary}';
         context.log('⚠️ Attempt $attempt failed: $lastFailureReason');
         context.state.recordAttemptFailure(lastFailureReason);

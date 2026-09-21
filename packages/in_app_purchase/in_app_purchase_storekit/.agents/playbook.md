@@ -90,13 +90,55 @@ graph TD
     C -->|exhausted| F
 ```
 
-### Phase 1 — the red test must fail
+### Phase 1 — the red test must *run*, and fail
 
-The model writes a test reproducing the issue, and the harness **requires it to
-fail** on clean `main`. A test that passes before the fix proves nothing; it is
-the single most common way an agent fakes success.
+The model writes a test reproducing the issue, and the harness requires it to
+fail. A test that passes before the fix proves nothing; it is the single most
+common way an agent fakes success.
 
-Each attempt resets the test file to its original content first, so attempts
+But "it failed" is a much weaker signal than it looks:
+
+> For an **additive API** issue — most of what this harness targets — a compile
+> error is unavoidable. A test naming `subscriptionStatus()` before that method
+> exists cannot build. `flutter test` exits 1 either way, so the exit code
+> cannot distinguish *"the behaviour is missing"* from *"the file does not
+> compile"*.
+
+We learned this the hard way, twice, in opposite directions. One run generated
+a test that no correct implementation could ever satisfy, and burned every
+attempt on it. The next generated a test that constructed an object and read
+its own fields back — it passed every gate and verified nothing. Both exited 1.
+Both looked identical to the gate.
+
+So Phase 1 asks for what TDD actually asks for. The red-test call returns two
+things:
+
+| Field | Contents |
+|---|---|
+| `test_code` | The reproduction test. Must call the API, not just build a value. |
+| `skeleton` | Declarations-only stubs. Every method body is `throw UnimplementedError();`. |
+
+The test is then run **against the skeleton**, and judged on how it fails:
+
+```mermaid
+flowchart TD
+    A["test + skeleton applied"] --> B{"result?"}
+    B -->|"did not compile"| C["skeleton is incomplete<br/>reject, retry with the errors"]
+    B -->|"passed"| D["asserts nothing the feature controls<br/>reject as vacuous"]
+    B -->|"failed at runtime"| E["ACCEPT<br/>it ran, and it is red for the right reason"]
+    style E fill:#e0ffe0
+```
+
+The middle branch is the useful one. A construct-then-read-fields-back test
+*always* passes against a skeleton, because a stubbed data class already
+assigns its fields. The vacuous test disqualifies itself, and no rule had to be
+written describing it.
+
+The skeleton is a **probe, not part of the fix**. It is reverted before Phase 2,
+so implementation always starts from clean code and a half-written stub can
+never be mistaken for the real thing.
+
+Each attempt resets both the test file and any skeleton edits first, so attempts
 cannot accumulate.
 
 The verified failure output is kept. It is the evidence the bug was real, and
@@ -229,6 +271,41 @@ its cases are static properties.
 
 Conformance boilerplate (`==`, `hashValue`, `RawValue`, protocol plumbing) is
 filtered out, since it otherwise crowds out real API.
+
+### Naming a type is not describing it
+
+Getting the right names into the prompt fixed hallucinated symbols completely.
+It did **not** stop the agent from misusing them.
+
+Twice the agent wrote a switch over `Product.SubscriptionInfo.RenewalState`
+ending in `@unknown default:` — enum-only syntax. `RenewalState` is a struct
+whose cases are `static let` properties, so the switch needs a plain `default:`.
+Swift rejects it, and a run died on it.
+
+The uncomfortable part: the block already said `struct RenewalState`, and
+already listed the cases as `static let subscribed: ...`. **The information was
+present and simply wasn't salient enough** to override the "this looks like an
+enum" reading. Adding facts to a prompt is not the same as making them land.
+
+So the oracle now detects this shape structurally — a struct with static
+members of its own type — and attaches an explicit consequence to the symbol:
+
+```
+- Product.SubscriptionInfo.RenewalState
+    struct RenewalState
+    !! ... is a STRUCT, not an enum. Its cases are `static let` properties.
+       A `switch` over it ... REQUIRES a plain `default:` clause. Writing
+       `@unknown default:` is a compile error ...
+```
+
+Detection is by shape, not by name, so any `RawRepresentable` pseudo-enum in any
+SDK gets the same treatment.
+
+The matching change on the failure side: `hoistCompilerDirectives` lifts
+`swiftc`'s `note:` lines to the top of the feedback under a REQUIRED CHANGES
+header. The compiler had literally printed *"remove '@unknown' to handle
+remaining values"*, the full text was fed back, and the next attempt repeated
+the error anyway — the remedy was fourteen lines into a wall of source context.
 
 ---
 

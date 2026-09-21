@@ -95,6 +95,34 @@ void main() {
     });
   });
 
+  group('Compiler directive hoisting', () {
+    test('hoists the note that cost run 6 to the top', () {
+      const swiftcOutput =
+          'StoreKit2Translators.swift:87:5: error: switch must be exhaustive\n'
+          ' 85 | extension Product.SubscriptionInfo.RenewalState {\n'
+          ' 87 |     switch self {\n'
+          '    |     `- error: switch must be exhaustive\n'
+          ' 98 |     @unknown default:\n'
+          "    |              `- note: remove '@unknown' to handle remaining values\n";
+
+      final String hoisted = hoistCompilerDirectives(swiftcOutput);
+
+      expect(hoisted, startsWith('REQUIRED CHANGES'));
+      expect(hoisted, contains("remove '@unknown' to handle remaining values"));
+    });
+
+    test('returns empty string when the compiler offered no remedy', () {
+      expect(hoistCompilerDirectives('error: cannot find type Foo in scope'), isEmpty);
+    });
+
+    test('de-duplicates a note repeated across several errors', () {
+      const output =
+          "a.swift:1:1: note: add 'default:'\n"
+          "b.swift:2:2: note: add 'default:'\n";
+      expect("add 'default:'".allMatches(hoistCompilerDirectives(output)).length, 1);
+    });
+  });
+
   group('Red test must have run', () {
     test('isCompileFailure recognises a suite that never loaded', () {
       expect(

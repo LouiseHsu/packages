@@ -260,4 +260,60 @@ void main() {
       timeout: const Timeout(Duration(minutes: 4)),
     );
   });
+
+  group('Pseudo-enum detection', () {
+    Map<String, dynamic> symbol(String path, String declaration, String kind) {
+      return <String, dynamic>{
+        'pathComponents': path.split('.'),
+        'kind': <String, dynamic>{'identifier': kind},
+        'declarationFragments': <Map<String, dynamic>>[
+          <String, dynamic>{'spelling': declaration},
+        ],
+      };
+    }
+
+    test('flags a struct whose cases are static lets of its own type', () {
+      final symbols = <Map<String, dynamic>>[
+        symbol('Product.RenewalState', 'struct RenewalState', 'swift.struct'),
+        symbol(
+          'Product.RenewalState.subscribed',
+          'static let subscribed: Product.RenewalState',
+          'swift.type.property',
+        ),
+      ];
+
+      expect(findPseudoEnums(symbols), contains('Product.RenewalState'));
+
+      final String block = formatSymbolBlock(symbols, moduleName: 'StoreKit');
+      expect(block, contains('is a STRUCT, not an enum'));
+      expect(block, contains('@unknown default:'));
+    });
+
+    test('does not flag a real enum', () {
+      final symbols = <Map<String, dynamic>>[
+        symbol('Product.ProductType', 'enum ProductType', 'swift.enum'),
+        symbol('Product.ProductType.consumable', 'case consumable', 'swift.enum.case'),
+      ];
+
+      expect(findPseudoEnums(symbols), isEmpty);
+      expect(
+        formatSymbolBlock(symbols, moduleName: 'StoreKit'),
+        isNot(contains('is a STRUCT, not an enum')),
+      );
+    });
+
+    test('does not flag a struct whose static members are a different type', () {
+      // A static convenience constant is not an enum case.
+      final symbols = <Map<String, dynamic>>[
+        symbol('Product.Price', 'struct Price', 'swift.struct'),
+        symbol(
+          'Product.Price.maximumDigits',
+          'static let maximumDigits: Int',
+          'swift.type.property',
+        ),
+      ];
+
+      expect(findPseudoEnums(symbols), isEmpty);
+    });
+  });
 }

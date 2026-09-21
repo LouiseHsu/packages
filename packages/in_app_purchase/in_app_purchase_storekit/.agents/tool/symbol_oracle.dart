@@ -449,11 +449,73 @@ bool _isType(Map<String, dynamic> symbol) {
       id == 'swift.typealias';
 }
 
+/// Returns the kind identifier of [symbol], or an empty string.
+String _kindIdentifier(Map<String, dynamic> symbol) {
+  final dynamic kind = symbol['kind'];
+  return kind is Map ? (kind['identifier']?.toString() ?? '') : '';
+}
+
+/// Renders the declaration of [symbol] by concatenating its fragments.
+String _declarationOf(Map<String, dynamic> symbol) {
+  final List<dynamic> fragments = symbol['declarationFragments'] as List<dynamic>? ?? <dynamic>[];
+  return fragments
+      .whereType<Map<String, dynamic>>()
+      .map((Map<String, dynamic> f) => f['spelling']?.toString() ?? '')
+      .join();
+}
+
+/// Paths of struct types in [symbols] that present themselves like enums.
+///
+/// `Product.SubscriptionInfo.RenewalState` is the motivating case: a struct
+/// whose "cases" are `static let subscribed: RenewalState` and friends. It
+/// reads exactly like an enum in the symbol list, and the agent twice wrote
+/// `@unknown default:` in a switch over it -- which is enum-only syntax, and
+/// cost a whole run. Knowing the member names was never the problem; knowing
+/// the kind of the type was.
+///
+/// Detected structurally rather than by name, so any `RawRepresentable`
+/// pseudo-enum on any SDK gets the same warning.
+Set<String> findPseudoEnums(List<Map<String, dynamic>> symbols) {
+  final structPaths = <String>{};
+  for (final symbol in symbols) {
+    if (_declarationOf(symbol).trimLeft().startsWith('struct ')) {
+      final List<dynamic> pathRaw = symbol['pathComponents'] as List<dynamic>? ?? <dynamic>[];
+      structPaths.add(pathRaw.map((dynamic e) => e.toString()).join('.'));
+    }
+  }
+
+  final pseudoEnums = <String>{};
+  for (final symbol in symbols) {
+    if (_kindIdentifier(symbol) != 'swift.type.property') {
+      continue;
+    }
+    final List<dynamic> pathRaw = symbol['pathComponents'] as List<dynamic>? ?? <dynamic>[];
+    if (pathRaw.length < 2) {
+      continue;
+    }
+    final String parent = pathRaw
+        .sublist(0, pathRaw.length - 1)
+        .map((dynamic e) => e.toString())
+        .join('.');
+    if (!structPaths.contains(parent)) {
+      continue;
+    }
+    // A static member whose type is the enclosing struct itself: that is the
+    // shape of a hand-rolled enum case.
+    final String declaration = _declarationOf(symbol);
+    if (declaration.contains('static let') && declaration.contains(parent.split('.').last)) {
+      pseudoEnums.add(parent);
+    }
+  }
+  return pseudoEnums;
+}
+
 /// Renders [symbols] as a compact prompt block.
 String formatSymbolBlock(List<Map<String, dynamic>> symbols, {required String moduleName}) {
   if (symbols.isEmpty) {
     return '';
   }
+  final Set<String> pseudoEnums = findPseudoEnums(symbols);
   final buffer = StringBuffer();
   buffer.writeln('AUTHORITATIVE $moduleName SDK SYMBOLS (generated from the installed Xcode SDK).');
   buffer.writeln(
@@ -466,15 +528,20 @@ String formatSymbolBlock(List<Map<String, dynamic>> symbols, {required String mo
     final List<dynamic> pathRaw = symbol['pathComponents'] as List<dynamic>? ?? <dynamic>[];
     final String path = pathRaw.map((dynamic e) => e.toString()).join('.');
 
-    final List<dynamic> fragments = symbol['declarationFragments'] as List<dynamic>? ?? <dynamic>[];
-    final String declaration = fragments
-        .whereType<Map<String, dynamic>>()
-        .map((Map<String, dynamic> f) => f['spelling']?.toString() ?? '')
-        .join();
+    final String declaration = _declarationOf(symbol);
 
     buffer.writeln('- $path');
     if (declaration.isNotEmpty) {
       buffer.writeln('    $declaration');
+    }
+
+    if (pseudoEnums.contains(path)) {
+      buffer.writeln(
+        '    !! $path is a STRUCT, not an enum. Its cases are `static let` '
+        'properties. A `switch` over it can never be proven exhaustive, so it '
+        'REQUIRES a plain `default:` clause. Writing `@unknown default:` is a '
+        'compile error: that syntax is only valid for enums.',
+      );
     }
 
     final dynamic doc = symbol['docComment'];
