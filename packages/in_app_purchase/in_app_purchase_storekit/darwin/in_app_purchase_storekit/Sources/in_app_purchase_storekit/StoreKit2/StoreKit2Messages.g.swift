@@ -59,9 +59,7 @@ private func wrapError(_ error: Any) -> [Any?] {
 }
 
 private func createConnectionError(withChannelName channelName: String) -> PigeonError {
-  return PigeonError(
-    code: "channel-error", message: "Unable to establish connection on channel: '\(channelName)'.",
-    details: "")
+  return PigeonError(code: "channel-error", message: "Unable to establish connection on channel: '\(channelName)'.", details: "")
 }
 
 enum StoreKit2MessagesPigeonInternal {
@@ -82,7 +80,7 @@ enum StoreKit2MessagesPigeonInternal {
 
   static func doubleHash(_ value: Double, _ hasher: inout Hasher) {
     if value.isNaN {
-      hasher.combine(0x7FF8_0000_0000_0000)
+      hasher.combine(0x7FF8000000000000)
     } else {
       // Normalize -0.0 to 0.0
       hasher.combine(value == 0 ? 0 : value)
@@ -192,6 +190,7 @@ private func nilOrValue<T>(_ value: Any?) -> T? {
   return value as! T?
 }
 
+
 enum SK2ProductTypeMessage: Int, CaseIterable {
   /// A consumable in-app purchase.
   case consumable = 0
@@ -251,6 +250,7 @@ struct SK2SubscriptionOfferMessage: Hashable, CustomStringConvertible {
   var periodCount: Int64
   var paymentMode: SK2SubscriptionOfferPaymentModeMessage
 
+
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2SubscriptionOfferMessage? {
     let id: String? = nilOrValue(pigeonVar_list[0])
@@ -283,12 +283,7 @@ struct SK2SubscriptionOfferMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.id, rhs.id)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.price, rhs.price)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.type, rhs.type)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.period, rhs.period)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.periodCount, rhs.periodCount)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.paymentMode, rhs.paymentMode)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.id, rhs.id) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.price, rhs.price) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.type, rhs.type) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.period, rhs.period) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.periodCount, rhs.periodCount) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.paymentMode, rhs.paymentMode)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -302,8 +297,7 @@ struct SK2SubscriptionOfferMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2SubscriptionOfferMessage(id: \(String(describing: id)), price: \(String(describing: price)), type: \(String(describing: type)), period: \(String(describing: period)), periodCount: \(String(describing: periodCount)), paymentMode: \(String(describing: paymentMode)))"
+    return "SK2SubscriptionOfferMessage(id: \(String(describing: id)), price: \(String(describing: price)), type: \(String(describing: type)), period: \(String(describing: period)), periodCount: \(String(describing: periodCount)), paymentMode: \(String(describing: paymentMode)))"
   }
 }
 
@@ -313,6 +307,7 @@ struct SK2SubscriptionPeriodMessage: Hashable, CustomStringConvertible {
   var value: Int64
   /// The unit of time that this period represents.
   var unit: SK2SubscriptionPeriodUnitMessage
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2SubscriptionPeriodMessage? {
@@ -334,8 +329,7 @@ struct SK2SubscriptionPeriodMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.value, rhs.value)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.unit, rhs.unit)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.value, rhs.value) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.unit, rhs.unit)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -345,8 +339,7 @@ struct SK2SubscriptionPeriodMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2SubscriptionPeriodMessage(value: \(String(describing: value)), unit: \(String(describing: unit)))"
+    return "SK2SubscriptionPeriodMessage(value: \(String(describing: value)), unit: \(String(describing: unit)))"
   }
 }
 
@@ -358,6 +351,7 @@ struct SK2SubscriptionInfoMessage: Hashable, CustomStringConvertible {
   var subscriptionGroupID: String
   /// The duration that this subscription lasts before auto-renewing.
   var subscriptionPeriod: SK2SubscriptionPeriodMessage
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2SubscriptionInfoMessage? {
@@ -382,10 +376,7 @@ struct SK2SubscriptionInfoMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.promotionalOffers, rhs.promotionalOffers)
-      && StoreKit2MessagesPigeonInternal.deepEquals(
-        lhs.subscriptionGroupID, rhs.subscriptionGroupID)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.subscriptionPeriod, rhs.subscriptionPeriod)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.promotionalOffers, rhs.promotionalOffers) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.subscriptionGroupID, rhs.subscriptionGroupID) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.subscriptionPeriod, rhs.subscriptionPeriod)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -396,8 +387,7 @@ struct SK2SubscriptionInfoMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2SubscriptionInfoMessage(promotionalOffers: \(String(describing: promotionalOffers)), subscriptionGroupID: \(String(describing: subscriptionGroupID)), subscriptionPeriod: \(String(describing: subscriptionPeriod)))"
+    return "SK2SubscriptionInfoMessage(promotionalOffers: \(String(describing: promotionalOffers)), subscriptionGroupID: \(String(describing: subscriptionGroupID)), subscriptionPeriod: \(String(describing: subscriptionPeriod)))"
   }
 }
 
@@ -422,6 +412,7 @@ struct SK2ProductMessage: Hashable, CustomStringConvertible {
   var subscription: SK2SubscriptionInfoMessage? = nil
   /// The currency and locale information for this product
   var priceLocale: SK2PriceLocaleMessage
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2ProductMessage? {
@@ -461,15 +452,7 @@ struct SK2ProductMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.id, rhs.id)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.displayName, rhs.displayName)
-      && StoreKit2MessagesPigeonInternal.deepEquals(
-        lhs.localizedDescription, rhs.localizedDescription)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.price, rhs.price)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.displayPrice, rhs.displayPrice)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.type, rhs.type)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.subscription, rhs.subscription)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.priceLocale, rhs.priceLocale)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.id, rhs.id) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.displayName, rhs.displayName) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.localizedDescription, rhs.localizedDescription) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.price, rhs.price) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.displayPrice, rhs.displayPrice) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.type, rhs.type) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.subscription, rhs.subscription) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.priceLocale, rhs.priceLocale)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -485,8 +468,7 @@ struct SK2ProductMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2ProductMessage(id: \(String(describing: id)), displayName: \(String(describing: displayName)), localizedDescription: \(String(describing: localizedDescription)), price: \(String(describing: price)), displayPrice: \(String(describing: displayPrice)), type: \(String(describing: type)), subscription: \(String(describing: subscription)), priceLocale: \(String(describing: priceLocale)))"
+    return "SK2ProductMessage(id: \(String(describing: id)), displayName: \(String(describing: displayName)), localizedDescription: \(String(describing: localizedDescription)), price: \(String(describing: price)), displayPrice: \(String(describing: displayPrice)), type: \(String(describing: type)), subscription: \(String(describing: subscription)), priceLocale: \(String(describing: priceLocale)))"
   }
 }
 
@@ -494,6 +476,7 @@ struct SK2ProductMessage: Hashable, CustomStringConvertible {
 struct SK2PriceLocaleMessage: Hashable, CustomStringConvertible {
   var currencyCode: String
   var currencySymbol: String
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2PriceLocaleMessage? {
@@ -515,8 +498,7 @@ struct SK2PriceLocaleMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.currencyCode, rhs.currencyCode)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.currencySymbol, rhs.currencySymbol)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.currencyCode, rhs.currencyCode) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.currencySymbol, rhs.currencySymbol)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -526,8 +508,7 @@ struct SK2PriceLocaleMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2PriceLocaleMessage(currencyCode: \(String(describing: currencyCode)), currencySymbol: \(String(describing: currencySymbol)))"
+    return "SK2PriceLocaleMessage(currencyCode: \(String(describing: currencyCode)), currencySymbol: \(String(describing: currencySymbol)))"
   }
 }
 
@@ -540,6 +521,7 @@ struct SK2SubscriptionOfferSignatureMessage: Hashable, CustomStringConvertible {
   var nonce: String
   var timestamp: Int64
   var signature: String
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2SubscriptionOfferSignatureMessage? {
@@ -563,16 +545,11 @@ struct SK2SubscriptionOfferSignatureMessage: Hashable, CustomStringConvertible {
       signature,
     ]
   }
-  static func == (
-    lhs: SK2SubscriptionOfferSignatureMessage, rhs: SK2SubscriptionOfferSignatureMessage
-  ) -> Bool {
+  static func == (lhs: SK2SubscriptionOfferSignatureMessage, rhs: SK2SubscriptionOfferSignatureMessage) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.keyID, rhs.keyID)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.nonce, rhs.nonce)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.timestamp, rhs.timestamp)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.signature, rhs.signature)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.keyID, rhs.keyID) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.nonce, rhs.nonce) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.timestamp, rhs.timestamp) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.signature, rhs.signature)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -584,8 +561,7 @@ struct SK2SubscriptionOfferSignatureMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2SubscriptionOfferSignatureMessage(keyID: \(String(describing: keyID)), nonce: \(String(describing: nonce)), timestamp: \(String(describing: timestamp)), signature: \(String(describing: signature)))"
+    return "SK2SubscriptionOfferSignatureMessage(keyID: \(String(describing: keyID)), nonce: \(String(describing: nonce)), timestamp: \(String(describing: timestamp)), signature: \(String(describing: signature)))"
   }
 }
 
@@ -593,6 +569,7 @@ struct SK2SubscriptionOfferSignatureMessage: Hashable, CustomStringConvertible {
 struct SK2SubscriptionOfferPurchaseMessage: Hashable, CustomStringConvertible {
   var promotionalOfferId: String
   var promotionalOfferSignature: SK2SubscriptionOfferSignatureMessage
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2SubscriptionOfferPurchaseMessage? {
@@ -610,16 +587,11 @@ struct SK2SubscriptionOfferPurchaseMessage: Hashable, CustomStringConvertible {
       promotionalOfferSignature,
     ]
   }
-  static func == (
-    lhs: SK2SubscriptionOfferPurchaseMessage, rhs: SK2SubscriptionOfferPurchaseMessage
-  ) -> Bool {
+  static func == (lhs: SK2SubscriptionOfferPurchaseMessage, rhs: SK2SubscriptionOfferPurchaseMessage) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(
-      lhs.promotionalOfferId, rhs.promotionalOfferId)
-      && StoreKit2MessagesPigeonInternal.deepEquals(
-        lhs.promotionalOfferSignature, rhs.promotionalOfferSignature)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.promotionalOfferId, rhs.promotionalOfferId) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.promotionalOfferSignature, rhs.promotionalOfferSignature)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -629,8 +601,7 @@ struct SK2SubscriptionOfferPurchaseMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2SubscriptionOfferPurchaseMessage(promotionalOfferId: \(String(describing: promotionalOfferId)), promotionalOfferSignature: \(String(describing: promotionalOfferSignature)))"
+    return "SK2SubscriptionOfferPurchaseMessage(promotionalOfferId: \(String(describing: promotionalOfferId)), promotionalOfferSignature: \(String(describing: promotionalOfferSignature)))"
   }
 }
 
@@ -646,6 +617,7 @@ struct SK2ProductPurchaseOptionsMessage: Hashable, CustomStringConvertible {
   /// This is passed to StoreKit verbatim; it is never parsed or validated
   /// client-side.
   var introductoryOfferEligibilityCompactJWS: String? = nil
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2ProductPurchaseOptionsMessage? {
@@ -672,18 +644,11 @@ struct SK2ProductPurchaseOptionsMessage: Hashable, CustomStringConvertible {
       introductoryOfferEligibilityCompactJWS,
     ]
   }
-  static func == (lhs: SK2ProductPurchaseOptionsMessage, rhs: SK2ProductPurchaseOptionsMessage)
-    -> Bool
-  {
+  static func == (lhs: SK2ProductPurchaseOptionsMessage, rhs: SK2ProductPurchaseOptionsMessage) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.appAccountToken, rhs.appAccountToken)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.quantity, rhs.quantity)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.promotionalOffer, rhs.promotionalOffer)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.winBackOfferId, rhs.winBackOfferId)
-      && StoreKit2MessagesPigeonInternal.deepEquals(
-        lhs.introductoryOfferEligibilityCompactJWS, rhs.introductoryOfferEligibilityCompactJWS)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.appAccountToken, rhs.appAccountToken) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.quantity, rhs.quantity) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.promotionalOffer, rhs.promotionalOffer) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.winBackOfferId, rhs.winBackOfferId) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.introductoryOfferEligibilityCompactJWS, rhs.introductoryOfferEligibilityCompactJWS)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -692,13 +657,11 @@ struct SK2ProductPurchaseOptionsMessage: Hashable, CustomStringConvertible {
     StoreKit2MessagesPigeonInternal.deepHash(value: quantity, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: promotionalOffer, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: winBackOfferId, hasher: &hasher)
-    StoreKit2MessagesPigeonInternal.deepHash(
-      value: introductoryOfferEligibilityCompactJWS, hasher: &hasher)
+    StoreKit2MessagesPigeonInternal.deepHash(value: introductoryOfferEligibilityCompactJWS, hasher: &hasher)
   }
 
   public var description: String {
-    return
-      "SK2ProductPurchaseOptionsMessage(appAccountToken: \(String(describing: appAccountToken)), quantity: \(String(describing: quantity)), promotionalOffer: \(String(describing: promotionalOffer)), winBackOfferId: \(String(describing: winBackOfferId)), introductoryOfferEligibilityCompactJWS: \(String(describing: introductoryOfferEligibilityCompactJWS)))"
+    return "SK2ProductPurchaseOptionsMessage(appAccountToken: \(String(describing: appAccountToken)), quantity: \(String(describing: quantity)), promotionalOffer: \(String(describing: promotionalOffer)), winBackOfferId: \(String(describing: winBackOfferId)), introductoryOfferEligibilityCompactJWS: \(String(describing: introductoryOfferEligibilityCompactJWS)))"
   }
 }
 
@@ -708,6 +671,7 @@ struct SK2TransactionMessage: Hashable, CustomStringConvertible {
   var originalId: Int64
   var productId: String
   var purchaseDate: Double? = nil
+  var originalPurchaseDate: Double? = nil
   var expirationDate: Double? = nil
   var purchasedQuantity: Int64
   var appAccountToken: String? = nil
@@ -718,25 +682,28 @@ struct SK2TransactionMessage: Hashable, CustomStringConvertible {
   /// Set by native side to communicate the result state to Dart layer.
   var status: SK2PurchaseStatusMessage
 
+
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2TransactionMessage? {
     let id = pigeonVar_list[0] as! Int64
     let originalId = pigeonVar_list[1] as! Int64
     let productId = pigeonVar_list[2] as! String
     let purchaseDate: Double? = nilOrValue(pigeonVar_list[3])
-    let expirationDate: Double? = nilOrValue(pigeonVar_list[4])
-    let purchasedQuantity = pigeonVar_list[5] as! Int64
-    let appAccountToken: String? = nilOrValue(pigeonVar_list[6])
-    let receiptData: String? = nilOrValue(pigeonVar_list[7])
-    let error: SK2ErrorMessage? = nilOrValue(pigeonVar_list[8])
-    let jsonRepresentation: String? = nilOrValue(pigeonVar_list[9])
-    let status = pigeonVar_list[10] as! SK2PurchaseStatusMessage
+    let originalPurchaseDate: Double? = nilOrValue(pigeonVar_list[4])
+    let expirationDate: Double? = nilOrValue(pigeonVar_list[5])
+    let purchasedQuantity = pigeonVar_list[6] as! Int64
+    let appAccountToken: String? = nilOrValue(pigeonVar_list[7])
+    let receiptData: String? = nilOrValue(pigeonVar_list[8])
+    let error: SK2ErrorMessage? = nilOrValue(pigeonVar_list[9])
+    let jsonRepresentation: String? = nilOrValue(pigeonVar_list[10])
+    let status = pigeonVar_list[11] as! SK2PurchaseStatusMessage
 
     return SK2TransactionMessage(
       id: id,
       originalId: originalId,
       productId: productId,
       purchaseDate: purchaseDate,
+      originalPurchaseDate: originalPurchaseDate,
       expirationDate: expirationDate,
       purchasedQuantity: purchasedQuantity,
       appAccountToken: appAccountToken,
@@ -752,6 +719,7 @@ struct SK2TransactionMessage: Hashable, CustomStringConvertible {
       originalId,
       productId,
       purchaseDate,
+      originalPurchaseDate,
       expirationDate,
       purchasedQuantity,
       appAccountToken,
@@ -765,17 +733,7 @@ struct SK2TransactionMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.id, rhs.id)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.originalId, rhs.originalId)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.productId, rhs.productId)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.purchaseDate, rhs.purchaseDate)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.expirationDate, rhs.expirationDate)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.purchasedQuantity, rhs.purchasedQuantity)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.appAccountToken, rhs.appAccountToken)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.receiptData, rhs.receiptData)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.error, rhs.error)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.jsonRepresentation, rhs.jsonRepresentation)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.status, rhs.status)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.id, rhs.id) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.originalId, rhs.originalId) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.productId, rhs.productId) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.purchaseDate, rhs.purchaseDate) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.originalPurchaseDate, rhs.originalPurchaseDate) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.expirationDate, rhs.expirationDate) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.purchasedQuantity, rhs.purchasedQuantity) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.appAccountToken, rhs.appAccountToken) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.receiptData, rhs.receiptData) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.error, rhs.error) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.jsonRepresentation, rhs.jsonRepresentation) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.status, rhs.status)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -784,6 +742,7 @@ struct SK2TransactionMessage: Hashable, CustomStringConvertible {
     StoreKit2MessagesPigeonInternal.deepHash(value: originalId, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: productId, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: purchaseDate, hasher: &hasher)
+    StoreKit2MessagesPigeonInternal.deepHash(value: originalPurchaseDate, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: expirationDate, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: purchasedQuantity, hasher: &hasher)
     StoreKit2MessagesPigeonInternal.deepHash(value: appAccountToken, hasher: &hasher)
@@ -794,8 +753,7 @@ struct SK2TransactionMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2TransactionMessage(id: \(String(describing: id)), originalId: \(String(describing: originalId)), productId: \(String(describing: productId)), purchaseDate: \(String(describing: purchaseDate)), expirationDate: \(String(describing: expirationDate)), purchasedQuantity: \(String(describing: purchasedQuantity)), appAccountToken: \(String(describing: appAccountToken)), receiptData: \(String(describing: receiptData)), error: \(String(describing: error)), jsonRepresentation: \(String(describing: jsonRepresentation)), status: \(String(describing: status)))"
+    return "SK2TransactionMessage(id: \(String(describing: id)), originalId: \(String(describing: originalId)), productId: \(String(describing: productId)), purchaseDate: \(String(describing: purchaseDate)), originalPurchaseDate: \(String(describing: originalPurchaseDate)), expirationDate: \(String(describing: expirationDate)), purchasedQuantity: \(String(describing: purchasedQuantity)), appAccountToken: \(String(describing: appAccountToken)), receiptData: \(String(describing: receiptData)), error: \(String(describing: error)), jsonRepresentation: \(String(describing: jsonRepresentation)), status: \(String(describing: status)))"
   }
 }
 
@@ -804,6 +762,7 @@ struct SK2ErrorMessage: Hashable, CustomStringConvertible {
   var code: Int64
   var domain: String
   var userInfo: [String: Any]? = nil
+
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SK2ErrorMessage? {
@@ -828,9 +787,7 @@ struct SK2ErrorMessage: Hashable, CustomStringConvertible {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.code, rhs.code)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.domain, rhs.domain)
-      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.userInfo, rhs.userInfo)
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.code, rhs.code) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.domain, rhs.domain) && StoreKit2MessagesPigeonInternal.deepEquals(lhs.userInfo, rhs.userInfo)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -841,8 +798,7 @@ struct SK2ErrorMessage: Hashable, CustomStringConvertible {
   }
 
   public var description: String {
-    return
-      "SK2ErrorMessage(code: \(String(describing: code)), domain: \(String(describing: domain)), userInfo: \(String(describing: userInfo)))"
+    return "SK2ErrorMessage(code: \(String(describing: code)), domain: \(String(describing: domain)), userInfo: \(String(describing: userInfo)))"
   }
 }
 
@@ -978,25 +934,19 @@ private class StoreKit2MessagesPigeonCodecReaderWriter: FlutterStandardReaderWri
 }
 
 class StoreKit2MessagesPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
-  static let shared = StoreKit2MessagesPigeonCodec(
-    readerWriter: StoreKit2MessagesPigeonCodecReaderWriter())
+  static let shared = StoreKit2MessagesPigeonCodec(readerWriter: StoreKit2MessagesPigeonCodecReaderWriter())
 }
+
 
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol InAppPurchase2API {
   func canMakePayments() throws -> Bool
-  func products(
-    identifiers: [String], completion: @escaping (Result<[SK2ProductMessage], Error>) -> Void)
-  func purchase(
-    id: String, options: SK2ProductPurchaseOptionsMessage?,
-    completion: @escaping (Result<SK2ProductPurchaseResultMessage, Error>) -> Void)
-  func isWinBackOfferEligible(
-    productId: String, offerId: String, completion: @escaping (Result<Bool, Error>) -> Void)
-  func isIntroductoryOfferEligible(
-    productId: String, completion: @escaping (Result<Bool, Error>) -> Void)
+  func products(identifiers: [String], completion: @escaping (Result<[SK2ProductMessage], Error>) -> Void)
+  func purchase(id: String, options: SK2ProductPurchaseOptionsMessage?, completion: @escaping (Result<SK2ProductPurchaseResultMessage, Error>) -> Void)
+  func isWinBackOfferEligible(productId: String, offerId: String, completion: @escaping (Result<Bool, Error>) -> Void)
+  func isIntroductoryOfferEligible(productId: String, completion: @escaping (Result<Bool, Error>) -> Void)
   func transactions(completion: @escaping (Result<[SK2TransactionMessage], Error>) -> Void)
-  func unfinishedTransactions(
-    completion: @escaping (Result<[SK2TransactionMessage], Error>) -> Void)
+  func unfinishedTransactions(completion: @escaping (Result<[SK2TransactionMessage], Error>) -> Void)
   func finish(id: Int64, completion: @escaping (Result<Void, Error>) -> Void)
   func startListeningToTransactions() throws
   func stopListeningToTransactions() throws
@@ -1010,15 +960,9 @@ protocol InAppPurchase2API {
 class InAppPurchase2APISetup {
   static var codec: FlutterStandardMessageCodec { StoreKit2MessagesPigeonCodec.shared }
   /// Sets up an instance of `InAppPurchase2API` to handle messages through the `binaryMessenger`.
-  static func setUp(
-    binaryMessenger: FlutterBinaryMessenger, api: InAppPurchase2API?,
-    messageChannelSuffix: String = ""
-  ) {
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: InAppPurchase2API?, messageChannelSuffix: String = "") {
     let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
-    let canMakePaymentsChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.canMakePayments\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let canMakePaymentsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.canMakePayments\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       canMakePaymentsChannel.setMessageHandler { _, reply in
         do {
@@ -1031,10 +975,7 @@ class InAppPurchase2APISetup {
     } else {
       canMakePaymentsChannel.setMessageHandler(nil)
     }
-    let productsChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.products\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let productsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.products\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       productsChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -1051,10 +992,7 @@ class InAppPurchase2APISetup {
     } else {
       productsChannel.setMessageHandler(nil)
     }
-    let purchaseChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.purchase\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let purchaseChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.purchase\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       purchaseChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -1072,10 +1010,7 @@ class InAppPurchase2APISetup {
     } else {
       purchaseChannel.setMessageHandler(nil)
     }
-    let isWinBackOfferEligibleChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.isWinBackOfferEligible\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let isWinBackOfferEligibleChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.isWinBackOfferEligible\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isWinBackOfferEligibleChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -1093,10 +1028,7 @@ class InAppPurchase2APISetup {
     } else {
       isWinBackOfferEligibleChannel.setMessageHandler(nil)
     }
-    let isIntroductoryOfferEligibleChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.isIntroductoryOfferEligible\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let isIntroductoryOfferEligibleChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.isIntroductoryOfferEligible\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isIntroductoryOfferEligibleChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -1113,10 +1045,7 @@ class InAppPurchase2APISetup {
     } else {
       isIntroductoryOfferEligibleChannel.setMessageHandler(nil)
     }
-    let transactionsChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.transactions\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let transactionsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.transactions\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       transactionsChannel.setMessageHandler { _, reply in
         api.transactions { result in
@@ -1131,10 +1060,7 @@ class InAppPurchase2APISetup {
     } else {
       transactionsChannel.setMessageHandler(nil)
     }
-    let unfinishedTransactionsChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.unfinishedTransactions\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let unfinishedTransactionsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.unfinishedTransactions\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       unfinishedTransactionsChannel.setMessageHandler { _, reply in
         api.unfinishedTransactions { result in
@@ -1149,9 +1075,7 @@ class InAppPurchase2APISetup {
     } else {
       unfinishedTransactionsChannel.setMessageHandler(nil)
     }
-    let finishChannel = FlutterBasicMessageChannel(
-      name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.finish\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let finishChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.finish\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       finishChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -1168,10 +1092,7 @@ class InAppPurchase2APISetup {
     } else {
       finishChannel.setMessageHandler(nil)
     }
-    let startListeningToTransactionsChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.startListeningToTransactions\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let startListeningToTransactionsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.startListeningToTransactions\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       startListeningToTransactionsChannel.setMessageHandler { _, reply in
         do {
@@ -1184,10 +1105,7 @@ class InAppPurchase2APISetup {
     } else {
       startListeningToTransactionsChannel.setMessageHandler(nil)
     }
-    let stopListeningToTransactionsChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.stopListeningToTransactions\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let stopListeningToTransactionsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.stopListeningToTransactions\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       stopListeningToTransactionsChannel.setMessageHandler { _, reply in
         do {
@@ -1200,10 +1118,7 @@ class InAppPurchase2APISetup {
     } else {
       stopListeningToTransactionsChannel.setMessageHandler(nil)
     }
-    let restorePurchasesChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.restorePurchases\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let restorePurchasesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.restorePurchases\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       restorePurchasesChannel.setMessageHandler { _, reply in
         api.restorePurchases { result in
@@ -1218,10 +1133,7 @@ class InAppPurchase2APISetup {
     } else {
       restorePurchasesChannel.setMessageHandler(nil)
     }
-    let countryCodeChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.countryCode\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let countryCodeChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.countryCode\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       countryCodeChannel.setMessageHandler { _, reply in
         api.countryCode { result in
@@ -1236,9 +1148,7 @@ class InAppPurchase2APISetup {
     } else {
       countryCodeChannel.setMessageHandler(nil)
     }
-    let syncChannel = FlutterBasicMessageChannel(
-      name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.sync\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let syncChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.sync\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       syncChannel.setMessageHandler { _, reply in
         api.sync { result in
@@ -1253,10 +1163,7 @@ class InAppPurchase2APISetup {
     } else {
       syncChannel.setMessageHandler(nil)
     }
-    let presentOfferCodeRedeemSheetChannel = FlutterBasicMessageChannel(
-      name:
-        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.presentOfferCodeRedeemSheet\(channelSuffix)",
-      binaryMessenger: binaryMessenger, codec: codec)
+    let presentOfferCodeRedeemSheetChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.presentOfferCodeRedeemSheet\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       presentOfferCodeRedeemSheetChannel.setMessageHandler { _, reply in
         api.presentOfferCodeRedeemSheet { result in
@@ -1276,9 +1183,7 @@ class InAppPurchase2APISetup {
 
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
 protocol InAppPurchase2CallbackAPIProtocol {
-  func onTransactionsUpdated(
-    newTransactions newTransactionsArg: [SK2TransactionMessage],
-    completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onTransactionsUpdated(newTransactions newTransactionsArg: [SK2TransactionMessage], completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class InAppPurchase2CallbackAPI: InAppPurchase2CallbackAPIProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -1290,14 +1195,9 @@ class InAppPurchase2CallbackAPI: InAppPurchase2CallbackAPIProtocol {
   var codec: StoreKit2MessagesPigeonCodec {
     return StoreKit2MessagesPigeonCodec.shared
   }
-  func onTransactionsUpdated(
-    newTransactions newTransactionsArg: [SK2TransactionMessage],
-    completion: @escaping (Result<Void, PigeonError>) -> Void
-  ) {
-    let channelName: String =
-      "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2CallbackAPI.onTransactionsUpdated\(messageChannelSuffix)"
-    let channel = FlutterBasicMessageChannel(
-      name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+  func onTransactionsUpdated(newTransactions newTransactionsArg: [SK2TransactionMessage], completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2CallbackAPI.onTransactionsUpdated\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([newTransactionsArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))

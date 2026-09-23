@@ -199,6 +199,7 @@ extension Transaction {
       originalId: Int64(originalID),
       productId: productID,
       purchaseDate: purchaseDate.timeIntervalSince1970,
+      originalPurchaseDate: originalPurchaseDate.timeIntervalSince1970,
       expirationDate: expirationDate.map { $0.timeIntervalSince1970 },
       purchasedQuantity: Int64(purchasedQuantity),
       appAccountToken: appAccountToken?.uuidString,
