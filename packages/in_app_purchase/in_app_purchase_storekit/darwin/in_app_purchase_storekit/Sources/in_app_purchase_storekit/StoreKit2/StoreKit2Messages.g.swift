@@ -222,6 +222,14 @@ enum SK2SubscriptionPeriodUnitMessage: Int, CaseIterable {
   case year = 3
 }
 
+enum SK2RenewalStateMessage: Int, CaseIterable {
+  case subscribed = 0
+  case expired = 1
+  case inGracePeriod = 2
+  case inBillingRetryPeriod = 3
+  case revoked = 4
+}
+
 enum SK2ProductPurchaseResultMessage: Int, CaseIterable {
   case success = 0
   case unverified = 1
@@ -398,6 +406,89 @@ struct SK2SubscriptionInfoMessage: Hashable, CustomStringConvertible {
   public var description: String {
     return
       "SK2SubscriptionInfoMessage(promotionalOffers: \(String(describing: promotionalOffers)), subscriptionGroupID: \(String(describing: subscriptionGroupID)), subscriptionPeriod: \(String(describing: subscriptionPeriod)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct SK2RenewalInfoMessage: Hashable, CustomStringConvertible {
+  var autoRenewPreference: String? = nil
+  var willAutoRenew: Bool
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> SK2RenewalInfoMessage? {
+    let autoRenewPreference: String? = nilOrValue(pigeonVar_list[0])
+    let willAutoRenew = pigeonVar_list[1] as! Bool
+
+    return SK2RenewalInfoMessage(
+      autoRenewPreference: autoRenewPreference,
+      willAutoRenew: willAutoRenew
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      autoRenewPreference,
+      willAutoRenew,
+    ]
+  }
+  static func == (lhs: SK2RenewalInfoMessage, rhs: SK2RenewalInfoMessage) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return StoreKit2MessagesPigeonInternal.deepEquals(
+      lhs.autoRenewPreference, rhs.autoRenewPreference)
+      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.willAutoRenew, rhs.willAutoRenew)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("SK2RenewalInfoMessage")
+    StoreKit2MessagesPigeonInternal.deepHash(value: autoRenewPreference, hasher: &hasher)
+    StoreKit2MessagesPigeonInternal.deepHash(value: willAutoRenew, hasher: &hasher)
+  }
+
+  public var description: String {
+    return
+      "SK2RenewalInfoMessage(autoRenewPreference: \(String(describing: autoRenewPreference)), willAutoRenew: \(String(describing: willAutoRenew)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct SK2SubscriptionStatusMessage: Hashable, CustomStringConvertible {
+  var state: SK2RenewalStateMessage
+  var renewalInfo: SK2RenewalInfoMessage
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> SK2SubscriptionStatusMessage? {
+    let state = pigeonVar_list[0] as! SK2RenewalStateMessage
+    let renewalInfo = pigeonVar_list[1] as! SK2RenewalInfoMessage
+
+    return SK2SubscriptionStatusMessage(
+      state: state,
+      renewalInfo: renewalInfo
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      state,
+      renewalInfo,
+    ]
+  }
+  static func == (lhs: SK2SubscriptionStatusMessage, rhs: SK2SubscriptionStatusMessage) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return StoreKit2MessagesPigeonInternal.deepEquals(lhs.state, rhs.state)
+      && StoreKit2MessagesPigeonInternal.deepEquals(lhs.renewalInfo, rhs.renewalInfo)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("SK2SubscriptionStatusMessage")
+    StoreKit2MessagesPigeonInternal.deepHash(value: state, hasher: &hasher)
+    StoreKit2MessagesPigeonInternal.deepHash(value: renewalInfo, hasher: &hasher)
+  }
+
+  public var description: String {
+    return
+      "SK2SubscriptionStatusMessage(state: \(String(describing: state)), renewalInfo: \(String(describing: renewalInfo)))"
   }
 }
 
@@ -876,34 +967,44 @@ private class StoreKit2MessagesPigeonCodecReader: FlutterStandardReader {
     case 133:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return SK2ProductPurchaseResultMessage(rawValue: enumResultAsInt)
+        return SK2RenewalStateMessage(rawValue: enumResultAsInt)
       }
       return nil
     case 134:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return SK2PurchaseStatusMessage(rawValue: enumResultAsInt)
+        return SK2ProductPurchaseResultMessage(rawValue: enumResultAsInt)
       }
       return nil
     case 135:
-      return SK2SubscriptionOfferMessage.fromList(self.readValue() as! [Any?])
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return SK2PurchaseStatusMessage(rawValue: enumResultAsInt)
+      }
+      return nil
     case 136:
-      return SK2SubscriptionPeriodMessage.fromList(self.readValue() as! [Any?])
+      return SK2SubscriptionOfferMessage.fromList(self.readValue() as! [Any?])
     case 137:
-      return SK2SubscriptionInfoMessage.fromList(self.readValue() as! [Any?])
+      return SK2SubscriptionPeriodMessage.fromList(self.readValue() as! [Any?])
     case 138:
-      return SK2ProductMessage.fromList(self.readValue() as! [Any?])
+      return SK2SubscriptionInfoMessage.fromList(self.readValue() as! [Any?])
     case 139:
-      return SK2PriceLocaleMessage.fromList(self.readValue() as! [Any?])
+      return SK2RenewalInfoMessage.fromList(self.readValue() as! [Any?])
     case 140:
-      return SK2SubscriptionOfferSignatureMessage.fromList(self.readValue() as! [Any?])
+      return SK2SubscriptionStatusMessage.fromList(self.readValue() as! [Any?])
     case 141:
-      return SK2SubscriptionOfferPurchaseMessage.fromList(self.readValue() as! [Any?])
+      return SK2ProductMessage.fromList(self.readValue() as! [Any?])
     case 142:
-      return SK2ProductPurchaseOptionsMessage.fromList(self.readValue() as! [Any?])
+      return SK2PriceLocaleMessage.fromList(self.readValue() as! [Any?])
     case 143:
-      return SK2TransactionMessage.fromList(self.readValue() as! [Any?])
+      return SK2SubscriptionOfferSignatureMessage.fromList(self.readValue() as! [Any?])
     case 144:
+      return SK2SubscriptionOfferPurchaseMessage.fromList(self.readValue() as! [Any?])
+    case 145:
+      return SK2ProductPurchaseOptionsMessage.fromList(self.readValue() as! [Any?])
+    case 146:
+      return SK2TransactionMessage.fromList(self.readValue() as! [Any?])
+    case 147:
       return SK2ErrorMessage.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -925,41 +1026,50 @@ private class StoreKit2MessagesPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? SK2SubscriptionPeriodUnitMessage {
       super.writeByte(132)
       super.writeValue(value.rawValue)
-    } else if let value = value as? SK2ProductPurchaseResultMessage {
+    } else if let value = value as? SK2RenewalStateMessage {
       super.writeByte(133)
       super.writeValue(value.rawValue)
-    } else if let value = value as? SK2PurchaseStatusMessage {
+    } else if let value = value as? SK2ProductPurchaseResultMessage {
       super.writeByte(134)
       super.writeValue(value.rawValue)
-    } else if let value = value as? SK2SubscriptionOfferMessage {
+    } else if let value = value as? SK2PurchaseStatusMessage {
       super.writeByte(135)
-      super.writeValue(value.toList())
-    } else if let value = value as? SK2SubscriptionPeriodMessage {
+      super.writeValue(value.rawValue)
+    } else if let value = value as? SK2SubscriptionOfferMessage {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2SubscriptionInfoMessage {
+    } else if let value = value as? SK2SubscriptionPeriodMessage {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2ProductMessage {
+    } else if let value = value as? SK2SubscriptionInfoMessage {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2PriceLocaleMessage {
+    } else if let value = value as? SK2RenewalInfoMessage {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2SubscriptionOfferSignatureMessage {
+    } else if let value = value as? SK2SubscriptionStatusMessage {
       super.writeByte(140)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2SubscriptionOfferPurchaseMessage {
+    } else if let value = value as? SK2ProductMessage {
       super.writeByte(141)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2ProductPurchaseOptionsMessage {
+    } else if let value = value as? SK2PriceLocaleMessage {
       super.writeByte(142)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2TransactionMessage {
+    } else if let value = value as? SK2SubscriptionOfferSignatureMessage {
       super.writeByte(143)
       super.writeValue(value.toList())
-    } else if let value = value as? SK2ErrorMessage {
+    } else if let value = value as? SK2SubscriptionOfferPurchaseMessage {
       super.writeByte(144)
+      super.writeValue(value.toList())
+    } else if let value = value as? SK2ProductPurchaseOptionsMessage {
+      super.writeByte(145)
+      super.writeValue(value.toList())
+    } else if let value = value as? SK2TransactionMessage {
+      super.writeByte(146)
+      super.writeValue(value.toList())
+    } else if let value = value as? SK2ErrorMessage {
+      super.writeByte(147)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -1004,6 +1114,9 @@ protocol InAppPurchase2API {
   func countryCode(completion: @escaping (Result<String, Error>) -> Void)
   func sync(completion: @escaping (Result<Void, Error>) -> Void)
   func presentOfferCodeRedeemSheet(completion: @escaping (Result<Void, Error>) -> Void)
+  func subscriptionStatus(
+    subscriptionGroupID: String,
+    completion: @escaping (Result<[SK2SubscriptionStatusMessage], Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -1270,6 +1383,26 @@ class InAppPurchase2APISetup {
       }
     } else {
       presentOfferCodeRedeemSheetChannel.setMessageHandler(nil)
+    }
+    let subscriptionStatusChannel = FlutterBasicMessageChannel(
+      name:
+        "dev.flutter.pigeon.in_app_purchase_storekit.InAppPurchase2API.subscriptionStatus\(channelSuffix)",
+      binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      subscriptionStatusChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let subscriptionGroupIDArg = args[0] as! String
+        api.subscriptionStatus(subscriptionGroupID: subscriptionGroupIDArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      subscriptionStatusChannel.setMessageHandler(nil)
     }
   }
 }

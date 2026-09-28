@@ -347,6 +347,26 @@ extension InAppPurchasePlugin: InAppPurchase2API {
     }
   }
 
+  func subscriptionStatus(
+    subscriptionGroupID: String,
+    completion: @escaping (Result<[SK2SubscriptionStatusMessage], Error>) -> Void
+  ) {
+    Task {
+      do {
+        let statuses = try await Product.SubscriptionInfo.status(for: subscriptionGroupID)
+        let statusMessages = statuses.compactMap { $0.convertToPigeon }
+        completion(.success(statusMessages))
+      } catch {
+        completion(
+          .failure(
+            PigeonError(
+              code: "storekit2_subscription_status_failed",
+              message: "Failed to fetch subscription status: \(error.localizedDescription)",
+              details: "Group ID: \(subscriptionGroupID), Error: \(error)")))
+      }
+    }
+  }
+
   func presentOfferCodeRedeemSheet(completion: @escaping (Result<Void, Error>) -> Void) {
     #if os(iOS)
       if #available(iOS 16.0, *) {

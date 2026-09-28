@@ -389,6 +389,20 @@ class InAppPurchaseStoreKitPlatform extends InAppPurchasePlatform {
   /// - `storekit2_failed_to_fetch_product`
   /// - `storekit2_not_subscription`
   /// - `storekit2_eligibility_check_failed`
+  /// Returns the subscription statuses for a subscription group (StoreKit2 only).
+  ///
+  /// Throws [PlatformException] if StoreKit2 is not enabled.
+  Future<List<SK2SubscriptionStatus>> subscriptionStatus(String subscriptionGroupID) async {
+    if (!_useStoreKit2) {
+      throw PlatformException(
+        code: 'storekit2_not_enabled',
+        message: 'Subscription status requires StoreKit2 which is not enabled.',
+      );
+    }
+
+    return SK2SubscriptionInfo.status(subscriptionGroupID);
+  }
+
   Future<bool> isWinBackOfferEligible(String productId, String offerId) async {
     if (!_useStoreKit2) {
       throw PlatformException(

@@ -76,6 +76,22 @@ class SK2SubscriptionInfoMessage {
   final SK2SubscriptionPeriodMessage subscriptionPeriod;
 }
 
+enum SK2RenewalStateMessage { subscribed, expired, inGracePeriod, inBillingRetryPeriod, revoked }
+
+class SK2RenewalInfoMessage {
+  const SK2RenewalInfoMessage({this.autoRenewPreference, required this.willAutoRenew});
+
+  final String? autoRenewPreference;
+  final bool willAutoRenew;
+}
+
+class SK2SubscriptionStatusMessage {
+  const SK2SubscriptionStatusMessage({required this.state, required this.renewalInfo});
+
+  final SK2RenewalStateMessage state;
+  final SK2RenewalInfoMessage renewalInfo;
+}
+
 /// A Pigeon message class representing a Product
 /// https://developer.apple.com/documentation/storekit/product
 class SK2ProductMessage {
@@ -269,6 +285,9 @@ abstract class InAppPurchase2API {
 
   @async
   void presentOfferCodeRedeemSheet();
+
+  @async
+  List<SK2SubscriptionStatusMessage> subscriptionStatus(String subscriptionGroupID);
 }
 
 @FlutterApi()

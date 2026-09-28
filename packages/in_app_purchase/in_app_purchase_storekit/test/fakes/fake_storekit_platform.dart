@@ -327,6 +327,8 @@ class FakeStoreKit2Platform implements InAppPurchase2API {
   SK2ProductPurchaseOptionsMessage? lastPurchaseOptions;
   Map<String, Set<String>> eligibleWinBackOffers = <String, Set<String>>{};
   Map<String, bool> eligibleIntroductoryOffers = <String, bool>{};
+  Map<String, List<SK2SubscriptionStatusMessage>> subscriptionStatuses =
+      <String, List<SK2SubscriptionStatusMessage>>{};
 
   /// Simulates purchase result for testing non-success scenarios.
   /// Set to userCancelled, pending, or unverified to test those cases.
@@ -349,6 +351,7 @@ class FakeStoreKit2Platform implements InAppPurchase2API {
     }
     eligibleWinBackOffers = <String, Set<String>>{};
     eligibleIntroductoryOffers = <String, bool>{};
+    subscriptionStatuses = <String, List<SK2SubscriptionStatusMessage>>{};
     simulatedPurchaseResult = SK2ProductPurchaseResultMessage.success;
     transactionsList = <SK2TransactionMessage>[
       SK2TransactionMessage(
@@ -524,6 +527,11 @@ class FakeStoreKit2Platform implements InAppPurchase2API {
     }
 
     return eligibleWinBackOffers[productId]?.contains(offerId) ?? false;
+  }
+
+  @override
+  Future<List<SK2SubscriptionStatusMessage>> subscriptionStatus(String subscriptionGroupID) async {
+    return subscriptionStatuses[subscriptionGroupID] ?? <SK2SubscriptionStatusMessage>[];
   }
 
   @override
