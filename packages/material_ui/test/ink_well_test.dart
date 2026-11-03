@@ -1338,6 +1338,7 @@ void main() {
               // forces a layer, which makes the paints easier to separate out
               link: LayerLink(),
               child: ListView(
+                cacheExtent: 250.0,
                 addAutomaticKeepAlives: keepAlive,
                 dragStartBehavior: DragStartBehavior.down,
                 children: <Widget>[

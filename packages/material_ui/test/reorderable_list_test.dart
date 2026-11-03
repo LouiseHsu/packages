@@ -1609,6 +1609,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ReorderableListView.builder(
+            cacheExtent: 250.0,
             itemBuilder: (BuildContext context, int index) {
               itemsCreated.add(index);
               return Text(index.toString(), key: ValueKey<int>(index));

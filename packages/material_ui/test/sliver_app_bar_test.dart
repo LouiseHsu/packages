@@ -84,6 +84,7 @@ void main() {
           child: MediaQuery(
             data: const MediaQueryData(),
             child: CustomScrollView(
+              cacheExtent: 250.0,
               slivers: <Widget>[
                 const SliverAppBar(
                   title: Text('Hello'),

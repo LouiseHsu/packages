@@ -233,6 +233,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: CustomScrollView(
+            cacheExtent: 250.0,
             slivers: <Widget>[
               const SliverAppBar(
                 pinned: true,
@@ -499,6 +500,7 @@ void main() {
         theme: ThemeData(useMaterial3: false),
         home: Scaffold(
           body: CustomScrollView(
+            cacheExtent: 250.0,
             slivers: <Widget>[
               const SliverAppBar(
                 pinned: true,
